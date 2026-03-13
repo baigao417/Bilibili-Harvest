@@ -2,22 +2,73 @@
 
 [English](README.en.md)
 
-一个面向 `Windows + Chrome` 的 B 站字幕采集与知识整理工具。  
-它将桌面端收敛为后台本地服务，把浏览器扩展作为唯一主界面，适合“看到视频就顺手沉淀成可检索文本”的使用方式。
+一个面向 `Windows + Chrome` 的 B 站内容采集与本地知识整理工具。  
+它把桌面端收敛为后台本地服务，把浏览器扩展作为唯一主界面，适合“边看视频，边沉淀资料”的日常工作流。
 
-## 项目简介
+## 项目定位
 
 BilibiliHarvest 主要解决三件事：
 
-- 从 B 站视频中优先提取现成字幕轨道
+- 优先提取 B 站现成字幕轨道
 - 在无字幕时自动回退到 Whisper ASR
-- 将结果一键沉淀到本地资料库，或推送到 NotebookLM
+- 把结果一键保存到本地知识库，或推送到 NotebookLM
 
-项目当前主打的是一个轻量但完整的工作流：
+如果你平时会把优质视频内容长期保存、整理、检索，那么这个项目就是为这种使用场景设计的。
 
-- 桌面端：后台 API 服务 + 系统托盘
-- 浏览器扩展：唯一用户界面
-- 本地资料库：字幕文本统一写入 `archive_root/<标题>_<BV>/text/`
+## 为什么要保存到本地知识库
+
+互联网上很多优质信息并不稳定：
+
+- 视频可能下架
+- 字幕可能被修改或消失
+- 平台页面结构和可见内容可能变化
+- 收藏夹、合集、列表也可能被删除或重组
+
+所以把重要内容尽早保存到本地，会比完全依赖在线平台更安全，也更利于后续检索、归档和二次整理。
+
+## 本地知识库 / Shape of Me 工作流
+
+项目支持把处理结果保存到你自己的本地知识库。这个功能你可以理解为：
+
+- 一个通用的“本地知识库”保存入口
+- 也可以按照你自己的命名习惯，把它当作 `Shape of Me` 工作流
+
+保存到本地知识库时，会为每个任务建立独立目录：
+
+- `video/`：默认优先保存 `1080P` 视频
+- `audio/`：同步保存提取后的音频
+- `text/`：保存字幕文本，格式可包含 `srt / txt / md`
+
+目录结构如下：
+
+- `<archive_root>/<safe_title>_<BV>/video/*`
+- `<archive_root>/<safe_title>_<BV>/audio/*`
+- `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
+
+## 名称可自定义
+
+“保存到本地知识库”这个功能名称支持自定义。
+
+你可以在扩展端配置里修改它的显示名称，例如：
+
+- 本地知识库
+- Shape of Me
+- 视频资料库
+- 素材库
+- 私人知识库
+
+这个名称会影响扩展界面里的按钮和提示文案，但不会影响底层处理能力。
+
+## 功能亮点
+
+- 优先抓取 B 站原生字幕轨道，减少不必要的 ASR 开销
+- 无轨道时自动降级到 Whisper ASR
+- 支持单视频、分 P、收藏夹、合集、列表、主页投稿
+- Chrome 扩展当前页一键发送
+- 处理完成后可一键：
+  - 保存到本地知识库
+  - 推送到 NotebookLM
+- 项目目录不再生成运行时 `outputs/` 文件夹
 
 ## 适合谁
 
@@ -25,17 +76,6 @@ BilibiliHarvest 主要解决三件事：
 - 想把视频内容快速转成可搜索文本的人
 - 想把字幕继续送去 NotebookLM 做整理、归纳、引用的人
 - 希望日常操作尽量都在浏览器里完成的人
-
-## 功能亮点
-
-- 优先抓取 B 站原生字幕轨道，减少不必要的 ASR 成本
-- 无轨道时自动降级到 Whisper ASR
-- 支持单视频、分 P、收藏夹、合集、列表、主页投稿
-- Chrome 扩展当前页一键发送
-- 处理完成后可一键：
-  - 保存到本地资料库
-  - 推送到 NotebookLM
-- 项目目录不再生成 `outputs/`，批次状态与临时数据统一写入 `config/`
 
 ## 快速开始
 
@@ -51,19 +91,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 5. 按向导完成：
    - 扫描桌面端
    - 自动配对
-   - 设置本地资料库目录
+   - 设置本地知识库目录
+   - 可选自定义知识库名称
    - 可选登录 NotebookLM
 
 ## 推荐使用方式
-
-日常使用建议按下面的流程走：
 
 1. 保持桌面端后台运行
 2. 在 Chrome 中打开 B 站视频、合集或列表页
 3. 在扩展 dashboard 中添加任务
 4. 启动批处理
 5. 处理完成后：
-   - 保存到本地资料库
+   - 保存到本地知识库
    - 或推送到 NotebookLM
 
 ## 项目结构
@@ -76,7 +115,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 - 扩展 `dashboard` 负责：
   - 添加任务
   - 启动批处理
-  - 保存到本地资料库
+  - 保存到本地知识库
   - 推送到 NotebookLM
 
 ## 存储路径
@@ -91,12 +130,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
   - `config/batches/<batch_id>/failed.json`
 - 临时字幕缓存：
   - `config/tmp/<batch_id>/`
-- 本地资料库默认目录：
+- 本地知识库默认目录：
   - `%USERPROFILE%\\Documents\\BilibiliHarvest Library`
-
-本地资料库结构：
-
-- `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
 
 ## 本地 API
 
@@ -137,7 +172,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 
 ### 1. 为什么项目里没有 `outputs/`？
 
-因为现在的设计目标是“直接沉淀到本地资料库”，而不是在项目目录里堆积导出文件。
+因为现在的设计目标是“直接沉淀到本地知识库”，而不是在项目目录里堆积运行时导出文件。
 
 ### 2. 可以只用扩展，不开桌面端吗？
 

@@ -6,6 +6,7 @@ const DEFAULTS = {
   paired: false,
   extension_id: "",
   archive_root: "",
+  archive_label: "本地知识库",
   source_type: "auto",
   import_mode: "single",
   limit: 200,
@@ -26,6 +27,7 @@ function normalizeConfig(data) {
     paired: Boolean(merged.paired),
     extension_id: String(merged.extension_id || "").trim(),
     archive_root: String(merged.archive_root || "").trim(),
+    archive_label: String(merged.archive_label || "本地知识库").trim() || "本地知识库",
     source_type: normalizedSourceType,
     import_mode: merged.import_mode || DEFAULTS.import_mode,
     limit: Number(merged.limit || DEFAULTS.limit),
@@ -192,6 +194,7 @@ async function callPairingClaim(port, extensionId) {
     paired: true,
     extension_id: String(data.extension_id || extensionId || "").trim(),
     archive_root: String(data.archive_root || "").trim(),
+    archive_label: String(data.archive_label || "本地知识库").trim() || "本地知识库",
   });
   await saveConfig(pairedConfig);
   return { ok: true, data };

@@ -17,9 +17,11 @@ class DummySignal:
 
 class FakeWindow:
     _sanitize_prefetched_segments = MainWindow._sanitize_prefetched_segments
+    _prepare_media_for_selected_task = MainWindow._prepare_media_for_selected_task
 
     def __init__(self):
         self._state_lock = threading.Lock()
+        self._media_cache_lock = threading.Lock()
         self.table_refresh_signal = DummySignal()
 
     def _current_cookie_mode(self):
@@ -120,8 +122,12 @@ class ProcessFallbackOrderTests(unittest.TestCase):
     @patch("window.discover_tracks_with_meta")
     @patch("window.discover_bili_tracks")
     @patch("window.ensure_task_identifiers")
-    def test_prefetch_save_selected_keeps_track_only_result(
+    @patch("window.convert_flv_to_mp3", return_value="audio.mp3")
+    @patch("window.download_video_prefer_1080", return_value="video.mp4")
+    def test_prefetch_save_selected_prepares_archive_media(
         self,
+        _mock_download_video_prefer_1080,
+        _mock_convert_flv_to_mp3,
         mock_ensure_task_identifiers,
         mock_discover_bili_tracks,
         mock_discover_tracks_with_meta,
@@ -139,8 +145,8 @@ class ProcessFallbackOrderTests(unittest.TestCase):
 
         self.assertEqual(task.status, TaskStatus.COMPLETED_TRACK)
         self.assertEqual(task.result_source, "browser_prefetch_ai")
-        self.assertEqual(task.video_file_path, "")
-        self.assertEqual(task.audio_file_path, "")
+        self.assertEqual(task.video_file_path, "video.mp4")
+        self.assertEqual(task.audio_file_path, "audio.mp3")
         self.assertFalse(mock_ensure_task_identifiers.called)
         self.assertFalse(mock_discover_bili_tracks.called)
         self.assertFalse(mock_discover_tracks_with_meta.called)

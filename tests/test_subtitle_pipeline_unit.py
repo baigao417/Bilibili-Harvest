@@ -134,6 +134,12 @@ second line
         with tempfile.TemporaryDirectory() as tmp:
             shape_root = os.path.join(tmp, "shape")
             os.makedirs(shape_root, exist_ok=True)
+            video_file = os.path.join(tmp, "video.mp4")
+            audio_file = os.path.join(tmp, "audio.mp3")
+            with open(video_file, "w", encoding="utf-8") as f:
+                f.write("video")
+            with open(audio_file, "w", encoding="utf-8") as f:
+                f.write("audio")
 
             task_ok = DummyTask(seq=1, bv="BVOK", status=TaskStatus.COMPLETED_ASR)
             task_ok.segments_cache = [{"start_sec": 0.0, "end_sec": 1.0, "text": "ok"}]
@@ -141,6 +147,8 @@ second line
             task_shape = DummyTask(seq=3, bv="BVSHAPE", status=TaskStatus.COMPLETED_TRACK)
             task_shape.segments_cache = [{"start_sec": 0.0, "end_sec": 1.0, "text": "shape"}]
             task_shape.save_selected = True
+            task_shape.video_file_path = video_file
+            task_shape.audio_file_path = audio_file
             task_fail = DummyTask(seq=2, bv="BVFAIL", status=TaskStatus.FAILED)
             batch = SimpleNamespace(
                 batch_id="BATCH001",
@@ -174,8 +182,8 @@ second line
             shape_dir = os.path.join(shape_root, f"{task_shape.title}_{task_shape.bv}")
             self.assertTrue(os.path.isdir(shape_dir))
             self.assertTrue(os.path.isdir(os.path.join(shape_dir, "text")))
-            self.assertFalse(os.path.exists(os.path.join(shape_dir, "video")))
-            self.assertFalse(os.path.exists(os.path.join(shape_dir, "audio")))
+            self.assertTrue(os.path.isdir(os.path.join(shape_dir, "video")))
+            self.assertTrue(os.path.isdir(os.path.join(shape_dir, "audio")))
 
     @patch("subtitle_pipeline.run_command")
     def test_manual_cookie_header_replaces_cookie_chain(self, mock_run_command):

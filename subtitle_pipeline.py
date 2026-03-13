@@ -551,6 +551,21 @@ def _is_success(task) -> bool:
     return value in ("completed_track", "completed_asr", "success")
 
 
+def _copy_path_to_dir(src_path: str, target_dir: str):
+    if not src_path or not os.path.exists(src_path):
+        return
+
+    os.makedirs(target_dir, exist_ok=True)
+    if os.path.isdir(src_path):
+        dst = os.path.join(target_dir, os.path.basename(src_path))
+        if os.path.exists(dst):
+            shutil.rmtree(dst, ignore_errors=True)
+        shutil.copytree(src_path, dst)
+        return
+
+    shutil.copy2(src_path, os.path.join(target_dir, os.path.basename(src_path)))
+
+
 def write_failed_tasks_json(path: str, tasks: list) -> str:
     if not path:
         raise SubtitleError("failed-state path is required")
@@ -667,8 +682,19 @@ def export_batch_selected(
             formats=selected,
         )
 
-        setattr(task, "shape_save_error", "")
-        setattr(task, "export_route", "archive")
+        video_src = getattr(task, "video_file_path", "")
+        audio_src = getattr(task, "audio_file_path", "")
+        _copy_path_to_dir(video_src, os.path.join(task_root, "video"))
+        _copy_path_to_dir(audio_src, os.path.join(task_root, "audio"))
+
+        archive_error = getattr(task, "asset_prepare_error", "") or ""
+        if not video_src or not os.path.exists(video_src):
+            archive_error = (archive_error + "; " if archive_error else "") + "video missing"
+        if not audio_src or not os.path.exists(audio_src):
+            archive_error = (archive_error + "; " if archive_error else "") + "audio missing"
+
+        setattr(task, "shape_save_error", archive_error)
+        setattr(task, "export_route", "archive_failed" if archive_error else "archive")
         task.outputs = outputs
         task.output_file = outputs.get("md")
         archive_saved_count += 1

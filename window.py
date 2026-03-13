@@ -94,7 +94,7 @@ from subtitle_sources import (
     resolve_source_auto,
     resolve_space_uploads,
 )
-from utils import download_video, find_primary_media_file, infer_download_title
+from utils import download_video, download_video_prefer_1080, find_primary_media_file, infer_download_title
 import notebooklm_client as nlm_client
 
 
@@ -637,6 +637,7 @@ class MainWindow(QMainWindow):
         self._runtime_config = load_runtime_config()
         self._force_http_enabled = bool(force_http_enabled)
         self._state_lock = threading.Lock()
+        self._media_cache_lock = threading.Lock()
         self._asr_semaphore = threading.Semaphore(1)
         self._current_batch: Optional[BatchContext] = None
         self._last_batch: Optional[BatchContext] = None
@@ -1260,6 +1261,7 @@ class MainWindow(QMainWindow):
             "pairable": self._pairing_is_available(),
             "port": int(self._http_server_port or self._runtime_config.http_port),
             "archive_root": str(getattr(self._runtime_config, "archive_root", "") or ""),
+            "archive_label": str(getattr(self._runtime_config, "archive_label", "本地知识库") or "本地知识库"),
             "core_version": CORE_VERSION,
         }
 
@@ -1283,12 +1285,14 @@ class MainWindow(QMainWindow):
             "port": int(self._http_server_port or self._runtime_config.http_port),
             "token": str(self._runtime_config.api_token or ""),
             "archive_root": str(getattr(self._runtime_config, "archive_root", "") or ""),
+            "archive_label": str(getattr(self._runtime_config, "archive_label", "本地知识库") or "本地知识库"),
         }
 
     def _svc_get_public_config(self) -> dict:
         return {
             "ok": True,
             "archive_root": str(getattr(self._runtime_config, "archive_root", "") or ""),
+            "archive_label": str(getattr(self._runtime_config, "archive_label", "本地知识库") or "本地知识库"),
             "notebooklm_enabled": bool(self._runtime_config.notebooklm_enabled),
             "notebooklm_notebook_id": str(self._runtime_config.notebooklm_notebook_id or ""),
             "notebooklm_auto_clean": bool(self._runtime_config.notebooklm_auto_clean),
@@ -1299,7 +1303,7 @@ class MainWindow(QMainWindow):
         if not isinstance(payload, dict):
             return {"ok": False, "error": "invalid payload"}
 
-        allowed_fields = {"archive_root", "notebooklm_enabled", "notebooklm_notebook_id", "notebooklm_auto_clean"}
+        allowed_fields = {"archive_root", "archive_label", "notebooklm_enabled", "notebooklm_notebook_id", "notebooklm_auto_clean"}
         unknown = sorted(key for key in payload.keys() if key not in allowed_fields)
         if unknown:
             return {"ok": False, "error": f"unsupported fields: {', '.join(unknown)}"}
@@ -1309,6 +1313,11 @@ class MainWindow(QMainWindow):
             if not archive_root:
                 return {"ok": False, "error": "archive_root is required"}
             self._runtime_config.archive_root = archive_root
+        if "archive_label" in payload:
+            archive_label = str(payload.get("archive_label") or "").strip()
+            if not archive_label:
+                return {"ok": False, "error": "archive_label is required"}
+            self._runtime_config.archive_label = archive_label
         if "notebooklm_enabled" in payload:
             self._runtime_config.notebooklm_enabled = bool(payload.get("notebooklm_enabled"))
         if "notebooklm_notebook_id" in payload:
@@ -2933,6 +2942,42 @@ class MainWindow(QMainWindow):
         if path not in task.temp_paths:
             task.temp_paths.append(path)
 
+    def _prepare_media_for_selected_task(self, batch: BatchContext, task: TaskItem, cookie_header: Optional[str], cookies_file: Optional[str]):
+        cache_lock = getattr(self, "_media_cache_lock", None) or threading.Lock()
+        with cache_lock:
+            cache = batch.media_cache.get(task.bv)
+        if cache:
+            task.video_file_path = cache.get("video", "")
+            task.audio_file_path = cache.get("audio", "")
+            for path in cache.get("temp_paths", []):
+                self._ensure_task_temp_path(task, path)
+            return
+
+        output_dir = os.path.join("bilibili_video", task.bv)
+        video_path = download_video_prefer_1080(
+            task.video_link or task.bv,
+            output_dir=output_dir,
+            cookie_header=cookie_header,
+            cookies_file=cookies_file,
+        )
+        if not video_path:
+            raise RuntimeError("1080优先下载失败")
+
+        audio_target = f"{task.bv}_asset"
+        audio_path = convert_flv_to_mp3(task.bv, target_name=audio_target, folder="bilibili_video")
+
+        temp_paths = [output_dir, audio_path]
+        with cache_lock:
+            batch.media_cache[task.bv] = {
+                "video": video_path,
+                "audio": audio_path,
+                "temp_paths": temp_paths,
+            }
+        task.video_file_path = video_path
+        task.audio_file_path = audio_path
+        for path in temp_paths:
+            self._ensure_task_temp_path(task, path)
+
     def _on_load_whisper(self):
         model_name = self.model_combo.currentText()
         if TORCH_PRELOAD_ERROR is not None:
@@ -3151,6 +3196,13 @@ class MainWindow(QMainWindow):
             task.output_file = None
             task.result_source = f"browser_prefetch_{track_type}"
 
+            if task.save_selected:
+                try:
+                    self._prepare_media_for_selected_task(batch, task, cookie_header, cookies_file)
+                except Exception as exc:
+                    task.asset_prepare_error = str(exc)
+                    self._log(f"补媒体失败: {exc}", level="WARN", stage="DOWNLOAD", task=task)
+
             task.status = TaskStatus.COMPLETED_TRACK
             task.subtitle_state = "已获取(轨道)"
             task.prefetched_segments = []
@@ -3233,6 +3285,12 @@ class MainWindow(QMainWindow):
                     task.outputs = {}
                     task.output_file = None
                     task.result_source = source_code
+                    if task.save_selected:
+                        try:
+                            self._prepare_media_for_selected_task(batch, task, cookie_header, cookies_file)
+                        except Exception as exc:
+                            task.asset_prepare_error = str(exc)
+                            self._log(f"补媒体失败: {exc}", level="WARN", stage="DOWNLOAD", task=task)
                     task.status = TaskStatus.COMPLETED_TRACK
                     task.subtitle_state = "已获取(轨道)"
                     self._log("B站API轨道字幕获取完成", stage="TRACK_DOWNLOAD", task=task)
@@ -3291,21 +3349,55 @@ class MainWindow(QMainWindow):
                     task.outputs = {}
                     task.output_file = None
                     task.result_source = source_code
+                    if task.save_selected:
+                        try:
+                            self._prepare_media_for_selected_task(batch, task, cookie_header, cookies_file)
+                        except Exception as exc:
+                            task.asset_prepare_error = str(exc)
+                            self._log(f"补媒体失败: {exc}", level="WARN", stage="DOWNLOAD", task=task)
                     task.status = TaskStatus.COMPLETED_TRACK
                     task.subtitle_state = "已获取(轨道)"
                     self._log("yt-dlp轨道字幕获取完成", stage="TRACK_DOWNLOAD", task=task)
                     return
 
         asr_gate = getattr(self, "_asr_semaphore", None) or threading.Semaphore(1)
+        cache_lock = getattr(self, "_media_cache_lock", None) or threading.Lock()
         with asr_gate:
             self._set_task_status(batch, task, TaskStatus.TRANSCRIBING_ASR, "ASR下载中")
             self._log("轨道不可用，切换 ASR 兜底", stage="DOWNLOAD", task=task)
-            file_identifier = download_video(task.bv[2:])
-            if not file_identifier:
-                raise StageFailure(FailStage.DOWNLOAD, "下载失败，未获取到有效媒体文件", retryable=True)
-            output_dir = os.path.join("bilibili_video", file_identifier)
-            task.video_file_path = find_primary_media_file(output_dir)
-            self._ensure_task_temp_path(task, output_dir)
+            if task.save_selected:
+                with cache_lock:
+                    cache = batch.media_cache.get(task.bv)
+                cached_video = (cache or {}).get("video", "")
+                if cached_video and os.path.exists(cached_video):
+                    video_path = cached_video
+                    output_dir = os.path.dirname(cached_video)
+                else:
+                    output_dir = os.path.join("bilibili_video", task.bv)
+                    video_path = download_video_prefer_1080(
+                        task.video_link or task.bv,
+                        output_dir=output_dir,
+                        cookie_header=cookie_header,
+                        cookies_file=cookies_file,
+                    )
+                    if not video_path:
+                        raise StageFailure(FailStage.DOWNLOAD, "下载失败，未获取到有效媒体文件", retryable=True)
+                file_identifier = task.bv
+                task.video_file_path = video_path
+                self._ensure_task_temp_path(task, output_dir)
+                with cache_lock:
+                    media_cache = batch.media_cache.get(task.bv, {"video": "", "audio": "", "temp_paths": []})
+                    media_cache["video"] = video_path
+                    if output_dir not in media_cache["temp_paths"]:
+                        media_cache["temp_paths"].append(output_dir)
+                    batch.media_cache[task.bv] = media_cache
+            else:
+                file_identifier = download_video(task.bv[2:])
+                if not file_identifier:
+                    raise StageFailure(FailStage.DOWNLOAD, "下载失败，未获取到有效媒体文件", retryable=True)
+                output_dir = os.path.join("bilibili_video", file_identifier)
+                task.video_file_path = find_primary_media_file(output_dir)
+                self._ensure_task_temp_path(task, output_dir)
 
             inferred = infer_download_title(task.bv)
             if inferred and inferred != "UnknownTitle":
@@ -3321,6 +3413,15 @@ class MainWindow(QMainWindow):
             for path in (task.audio_file_path, slice_dir):
                 if os.path.exists(path):
                     self._ensure_task_temp_path(task, path)
+            if task.save_selected:
+                with cache_lock:
+                    cache = batch.media_cache.get(task.bv, {})
+                    cache["audio"] = task.audio_file_path
+                    cache.setdefault("temp_paths", [])
+                    for path in (task.audio_file_path, slice_dir):
+                        if path not in cache["temp_paths"]:
+                            cache["temp_paths"].append(path)
+                    batch.media_cache[task.bv] = cache
 
             def _progress(cur: int, total: int):
                 with self._state_lock:

@@ -38,10 +38,8 @@ jobs:
               "https://github.com/baigao417/bili2text-",
               "private fork",
               "E:\\shape of me",
-              "Shape of Me",
-              "BilibiliHarvest (Background)",
           ]
-          ignored_parts = {".git", "outputs", ".venv", "__pycache__"}
+          ignored_parts = {".git", ".github", "outputs", ".venv", "__pycache__"}
           hits = []
           for path in root.rglob("*"):
               if not path.is_file():

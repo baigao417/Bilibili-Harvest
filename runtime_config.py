@@ -11,6 +11,7 @@ DEFAULT_HTTP_PORT = 16780
 DEFAULT_PORT_SCAN_WINDOW = 20
 DEFAULT_API_TOKEN = "bili2text_local_default_token"
 DEFAULT_ARCHIVE_ROOT = os.path.join(os.path.expanduser("~"), "Documents", "BilibiliHarvest Library")
+DEFAULT_ARCHIVE_LABEL = "本地知识库"
 
 
 @dataclass
@@ -27,6 +28,7 @@ class RuntimeConfig:
     notebooklm_notebook_id: str = ""
     notebooklm_auto_clean: bool = True
     archive_root: str = DEFAULT_ARCHIVE_ROOT
+    archive_label: str = DEFAULT_ARCHIVE_LABEL
 
     def normalized(self) -> "RuntimeConfig":
         self.http_host = (self.http_host or DEFAULT_HTTP_HOST).strip() or DEFAULT_HTTP_HOST
@@ -40,6 +42,8 @@ class RuntimeConfig:
         self.api_token = token
         archive_root = os.path.abspath(os.path.expanduser(str(self.archive_root or DEFAULT_ARCHIVE_ROOT)))
         self.archive_root = archive_root or DEFAULT_ARCHIVE_ROOT
+        archive_label = str(self.archive_label or DEFAULT_ARCHIVE_LABEL).strip()
+        self.archive_label = archive_label or DEFAULT_ARCHIVE_LABEL
         return self
 
 
@@ -95,6 +99,7 @@ def load_runtime_config(path: str = RUNTIME_CONFIG_PATH) -> RuntimeConfig:
         archive_root=str(
             payload.get("archive_root", payload.get("shape_root", DEFAULT_ARCHIVE_ROOT)) or DEFAULT_ARCHIVE_ROOT
         ),
+        archive_label=str(payload.get("archive_label", DEFAULT_ARCHIVE_LABEL) or DEFAULT_ARCHIVE_LABEL),
     ).normalized()
     save_runtime_config(cfg, path=path)
     return cfg

@@ -2,29 +2,62 @@
 
 [中文文档](README.md)
 
-A `Windows + Chrome` tool for extracting Bilibili subtitles and organizing them into a reusable knowledge workflow.  
+A `Windows + Chrome` tool for extracting Bilibili content into a reusable local knowledge workflow.  
 The desktop app is reduced to a local background service, while the browser extension acts as the primary UI.
 
-## Overview
+## Project Positioning
 
-BilibiliHarvest focuses on three things:
+BilibiliHarvest is built around three goals:
 
-- extracting native subtitle tracks from Bilibili whenever possible
-- falling back to Whisper ASR when subtitle tracks are unavailable
-- turning the result into reusable text for a local library or NotebookLM
+- extract native Bilibili subtitle tracks whenever possible
+- fall back to Whisper ASR when subtitle tracks are unavailable
+- save the result into a local knowledge base or push it into NotebookLM
 
-Current structure:
+If your workflow depends on collecting, preserving, and searching valuable Bilibili content over time, this project is designed for that use case.
 
-- Desktop app: local API service + system tray
-- Browser extension: the only user-facing interface
-- Local library: subtitle text saved under `archive_root/<title>_<BV>/text/`
+## Why Save to a Local Knowledge Base
 
-## Who It Is For
+High-quality information on the internet is often fragile:
 
-- People who want to build a searchable archive from Bilibili content
-- People who want to convert video knowledge into text quickly
-- People who want to push cleaned subtitle text into NotebookLM
-- People who prefer browser-first operation instead of a heavy desktop workflow
+- videos can be removed
+- subtitles can change or disappear
+- page structure and visible content can change
+- collections, favorites, and lists can be deleted or reorganized
+
+Saving important material locally is therefore safer than relying entirely on the platform, and it also makes later indexing, archiving, and reuse much easier.
+
+## Local Knowledge Base / Shape of Me Workflow
+
+The project supports saving processed results into your own local knowledge base. You can think of this as:
+
+- a generic local knowledge base workflow
+- or, if you prefer, your own `Shape of Me` style workflow
+
+When saving to the local knowledge base, each task gets its own folder:
+
+- `video/`: saves video, preferring `1080P` by default
+- `audio/`: saves extracted audio
+- `text/`: saves subtitle text as `srt / txt / md`
+
+Folder layout:
+
+- `<archive_root>/<safe_title>_<BV>/video/*`
+- `<archive_root>/<safe_title>_<BV>/audio/*`
+- `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
+
+## Customizable Feature Name
+
+The "save to local knowledge base" feature name is customizable.
+
+You can rename it in the extension settings, for example:
+
+- Local Knowledge Base
+- Shape of Me
+- Video Archive
+- Research Library
+- Personal Knowledge Vault
+
+The custom name affects UI labels and prompts, but not the underlying processing pipeline.
 
 ## Highlights
 
@@ -33,9 +66,16 @@ Current structure:
 - Supports single videos, multi-part videos, favorites, collections, series, and space uploads
 - One-click send from the current Chrome tab
 - One-click post-processing:
-  - save to the local library
+  - save to the local knowledge base
   - push to NotebookLM
 - No runtime `outputs/` directory is generated in the project root
+
+## Who It Is For
+
+- People who want to build a long-term archive from Bilibili content
+- People who want searchable text from videos quickly
+- People who want to push cleaned subtitle text into NotebookLM
+- People who prefer a browser-first workflow instead of a heavy desktop UI
 
 ## Quick Start
 
@@ -51,7 +91,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 5. Finish the setup wizard:
    - detect the desktop service
    - auto-pair
-   - choose the local library path
+   - choose the local knowledge base path
+   - optionally customize the feature name
    - optionally sign in to NotebookLM
 
 ## Recommended Workflow
@@ -61,7 +102,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 3. Add tasks from the dashboard
 4. Start batch processing
 5. When processing finishes:
-   - save to the local library
+   - save to the local knowledge base
    - or push to NotebookLM
 
 ## Project Structure
@@ -74,7 +115,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 - The dashboard handles:
   - task import
   - batch control
-  - save to local library
+  - save to local knowledge base
   - push to NotebookLM
 
 ## Storage
@@ -91,10 +132,6 @@ The project no longer creates a runtime `outputs/` directory.
   - `config/tmp/<batch_id>/`
 - Default local library:
   - `%USERPROFILE%\Documents\BilibiliHarvest Library`
-
-Local library layout:
-
-- `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
 
 ## Local API
 
@@ -127,13 +164,11 @@ This project borrows from or depends on the following open source projects:
 - [`QDarkStyleSheet`](https://github.com/ColinDuquesnoy/QDarkStyleSheet): desktop styling
 - [`notebooklm-py`](https://pypi.org/project/notebooklm-py/): NotebookLM integration support
 
-If any project attribution should be refined, feel free to open an issue or pull request.
-
 ## FAQ
 
 ### Why is there no `outputs/` directory?
 
-Because the project is now designed to write directly into the local library instead of producing transient export folders in the repo root.
+Because the project is now designed to write directly into the local knowledge base instead of producing runtime export folders in the repo root.
 
 ### Can I use the extension without the desktop app?
 

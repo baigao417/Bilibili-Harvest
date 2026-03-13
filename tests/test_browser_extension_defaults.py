@@ -16,6 +16,7 @@ class BrowserExtensionDefaultsTests(unittest.TestCase):
         self.assertIn("paired: false", background)
         self.assertIn('extension_id: ""', background)
         self.assertIn("archive_root: \"\"", background)
+        self.assertIn('archive_label: "本地知识库"', background)
 
     def test_background_has_pairing_and_config_endpoints(self):
         background = self._read_file("browser_extension/background.js")
@@ -36,6 +37,7 @@ class BrowserExtensionDefaultsTests(unittest.TestCase):
         self.assertIn('type: "pairing_scan"', dashboard)
         self.assertIn('type: "pairing_claim"', dashboard)
         self.assertIn('type: "runtime_config_patch"', dashboard)
+        self.assertIn("function applyArchiveLabel", dashboard)
 
     def test_dashboard_html_contains_wizard_and_offline_panels(self):
         dashboard_html = self._read_file("browser_extension/dashboard.html")

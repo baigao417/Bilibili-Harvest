@@ -7,6 +7,7 @@ const DEFAULTS = {
   paired: false,
   extension_id: "",
   archive_root: "",
+  archive_label: "本地知识库",
   source_type: "auto",
   import_mode: "single",
   limit: 200,
@@ -47,6 +48,7 @@ const ui = {
   wizardStatus: $("wizardStatus"),
   wizardArchiveRow: $("wizardArchiveRow"),
   wizardArchiveRoot: $("wizardArchiveRoot"),
+  wizardArchiveLabel: $("wizardArchiveLabel"),
   wizardPrimaryBtn: $("wizardPrimaryBtn"),
   wizardSecondaryBtn: $("wizardSecondaryBtn"),
   wizardSkipBtn: $("wizardSkipBtn"),
@@ -82,6 +84,7 @@ const ui = {
   clearBtn: $("clearBtn"),
   cfgPort: $("cfgPort"),
   cfgToken: $("cfgToken"),
+  cfgArchiveLabel: $("cfgArchiveLabel"),
   cfgSaveBtn: $("cfgSaveBtn"),
   cfgTestBtn: $("cfgTestBtn"),
 
@@ -151,6 +154,21 @@ function ensureTaskTable() {
   }
 }
 
+function currentArchiveLabel() {
+  return String((currentConfig && currentConfig.archive_label) || DEFAULTS.archive_label || "本地知识库").trim() || "本地知识库";
+}
+
+function applyArchiveLabel(label) {
+  const archiveLabel = String(label || DEFAULTS.archive_label || "本地知识库").trim() || "本地知识库";
+  if (ui.mainShapeBtn) {
+    const textNode = ui.mainShapeBtn.querySelector(".btn-text");
+    if (textNode) textNode.textContent = `保存到${archiveLabel}`;
+  }
+  if (ui.shapeSuccessPath && !(currentConfig && currentConfig.archive_root)) {
+    ui.shapeSuccessPath.textContent = `已写入${archiveLabel}`;
+  }
+}
+
 async function bootstrapDashboard() {
   if (dashboardBootstrapped) {
     return;
@@ -159,6 +177,7 @@ async function bootstrapDashboard() {
   if (ui.wizardPanel) ui.wizardPanel.style.display = "none";
   if (ui.offlinePanel) ui.offlinePanel.style.display = "none";
   currentConfig = await loadConfig();
+  applyArchiveLabel(currentArchiveLabel());
   await checkConnection();
   startPolling();
   refreshNotebooks();
@@ -271,8 +290,11 @@ async function handleWizardPrimary() {
       return;
     }
     const cfg = unwrapResponse(cfgResp);
+    currentConfig = { ...(currentConfig || {}), ...cfg };
+    applyArchiveLabel(currentArchiveLabel());
     if (ui.wizardArchiveRow) ui.wizardArchiveRow.style.display = "block";
     if (ui.wizardArchiveRoot) ui.wizardArchiveRoot.value = String(cfg.archive_root || currentConfig.archive_root || "");
+    if (ui.wizardArchiveLabel) ui.wizardArchiveLabel.value = String(cfg.archive_label || currentConfig.archive_label || DEFAULTS.archive_label);
     if (ui.wizardPrimaryBtn) ui.wizardPrimaryBtn.textContent = "保存目录并继续";
     if (ui.wizardSecondaryBtn) {
       ui.wizardSecondaryBtn.style.display = "inline-flex";
@@ -283,14 +305,17 @@ async function handleWizardPrimary() {
 
   if (wizardStep === 2) {
     const archiveRoot = String((ui.wizardArchiveRoot && ui.wizardArchiveRoot.value) || "").trim();
+    const archiveLabel = String((ui.wizardArchiveLabel && ui.wizardArchiveLabel.value) || DEFAULTS.archive_label).trim();
     const resp = await sendMessage({
       type: "runtime_config_patch",
-      payload: { archive_root: archiveRoot },
+      payload: { archive_root: archiveRoot, archive_label: archiveLabel },
     });
     if (!resp || !resp.ok) {
       setWizardStatus(responseError(resp, "保存目录失败"), "error");
       return;
     }
+    currentConfig = { ...(currentConfig || {}), ...unwrapResponse(resp) };
+    applyArchiveLabel(currentArchiveLabel());
     wizardStep = 3;
     if (ui.wizardStepText) ui.wizardStepText.textContent = "步骤 3/4：可选登录 NotebookLM";
     setWizardStatus("本地资料库目录已保存。你现在可以选择登录 NotebookLM，或直接完成。", "ok");
@@ -388,7 +413,7 @@ async function runWorkflow(target) {
 
   const hasRows = Array.isArray(currentTasks) && currentTasks.length > 0;
   if (!hasRows) {
-    const ok = confirm(`当前列表中没有任务。\n是否获取当前浏览器标签页的视频，并自动${target === "nlm" ? "推送到 NotebookLM" : "保存到本地资料库"}？`);
+    const ok = confirm(`当前列表中没有任务。\n是否获取当前浏览器标签页的视频，并自动${target === "nlm" ? "推送到 NotebookLM" : `保存到${currentArchiveLabel()}`}？`);
     if (!ok) return;
 
     workflowState = { running: true, step: "adding", target };
@@ -428,7 +453,7 @@ async function runWorkflow(target) {
       await pushToNotebookLM();
     } else {
       workflowState = { running: true, step: "exporting", target };
-      updateStatusUI("正在保存到本地资料库...", 92);
+      updateStatusUI(`正在保存到${currentArchiveLabel()}...`, 92);
       await markTasksForShape(tasks);
       await exportToShape();
     }
@@ -481,7 +506,7 @@ async function handleWorkflowStep(status) {
   }
 
   workflowState.step = "exporting";
-  updateStatusUI("正在保存到本地资料库...", 92);
+  updateStatusUI(`正在保存到${currentArchiveLabel()}...`, 92);
   await markTasksForShape(tasks);
   await exportToShape();
 }
@@ -517,7 +542,7 @@ function finishWorkflow(result, msg) {
     if (ui.shapeSuccessPath) {
       ui.shapeSuccessPath.textContent = currentConfig && currentConfig.archive_root
         ? `已写入 ${currentConfig.archive_root}`
-        : "已写入本地资料库";
+        : `已写入${currentArchiveLabel()}`;
     }
     ui.progressText.textContent = "完成";
     ui.progressFill.style.width = "100%";
@@ -594,7 +619,7 @@ async function exportToShape() {
     formats: { srt: true, txt: true, md: true }
   });
   if (!isResponseOk(resp)) {
-    finishWorkflow("fail", responseError(resp, "保存到本地资料库失败"));
+    finishWorkflow("fail", responseError(resp, `保存到${currentArchiveLabel()}失败`));
     return;
   }
 
@@ -604,7 +629,7 @@ async function exportToShape() {
     finishWorkflow("success-shape");
     return;
   }
-  finishWorkflow("fail", "未检测到已保存文件，请确认任务的资料库保存标记后重试。");
+  finishWorkflow("fail", `未检测到已保存文件，请确认任务的${currentArchiveLabel()}保存标记后重试。`);
 }
 
 async function handleAddCurrent(forceShape = false) {
@@ -939,6 +964,7 @@ function normalizeStoredConfig(cfg) {
     paired: Boolean(merged.paired),
     extension_id: String(merged.extension_id || "").trim(),
     archive_root: String(merged.archive_root || "").trim(),
+    archive_label: String(merged.archive_label || DEFAULTS.archive_label).trim() || DEFAULTS.archive_label,
     source_type: String(merged.source_type || DEFAULTS.source_type).trim() || DEFAULTS.source_type,
     import_mode: merged.import_mode || DEFAULTS.import_mode,
     limit: Number(merged.limit || DEFAULTS.limit),
@@ -953,6 +979,7 @@ async function loadConfig() {
       const normalized = normalizeStoredConfig(cfg);
       ui.cfgPort.value = normalized.port;
       ui.cfgToken.value = normalized.token;
+      if (ui.cfgArchiveLabel) ui.cfgArchiveLabel.value = normalized.archive_label;
       ui.sourceType.value = normalized.source_type;
       ui.importMode.value = normalized.import_mode;
       ui.limit.value = normalized.limit;
@@ -970,6 +997,7 @@ function collectConfig() {
     paired: Boolean(currentConfig && currentConfig.paired),
     extension_id: String((currentConfig && currentConfig.extension_id) || "").trim(),
     archive_root: String((currentConfig && currentConfig.archive_root) || "").trim(),
+    archive_label: String((ui.cfgArchiveLabel && ui.cfgArchiveLabel.value) || (currentConfig && currentConfig.archive_label) || DEFAULTS.archive_label).trim() || DEFAULTS.archive_label,
     source_type: ui.sourceType.value || DEFAULTS.source_type,
     import_mode: ui.importMode.value || DEFAULTS.import_mode,
     limit: Number(ui.limit.value || DEFAULTS.limit),
@@ -981,8 +1009,16 @@ function collectConfig() {
 async function saveConfig() {
   const cfg = collectConfig();
   chrome.storage.sync.set(cfg);
+  await sendMessage({
+    type: "runtime_config_patch",
+    payload: {
+      archive_root: cfg.archive_root,
+      archive_label: cfg.archive_label,
+    },
+  });
   await sendMessage({ type: "save_config", payload: cfg });
   currentConfig = normalizeStoredConfig(cfg);
+  applyArchiveLabel(currentArchiveLabel());
   setStatusMessage("配置已保存", "ok");
 }
 

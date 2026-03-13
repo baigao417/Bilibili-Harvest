@@ -16,6 +16,7 @@ class RuntimeConfigTests(unittest.TestCase):
             self.assertTrue(cfg.api_token)
             self.assertNotEqual(cfg.api_token, DEFAULT_API_TOKEN)
             self.assertTrue(cfg.archive_root.endswith("BilibiliHarvest Library"))
+            self.assertEqual(cfg.archive_label, "本地知识库")
 
     def test_save_and_reload_normalizes_values(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,6 +36,7 @@ class RuntimeConfigTests(unittest.TestCase):
             self.assertEqual(loaded.io_workers, 4)
             self.assertEqual(loaded.extension_ids, ["test"])
             self.assertTrue(os.path.isabs(loaded.archive_root))
+            self.assertEqual(loaded.archive_label, "本地知识库")
 
     def test_reset_api_token_changes_value(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -59,10 +61,11 @@ class RuntimeConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "runtime.json")
             with open(path, "w", encoding="utf-8") as f:
-                f.write('{"shape_root":"C:/archive-old","api_token":"keep_me"}')
+                f.write('{"shape_root":"C:/archive-old","api_token":"keep_me","archive_label":"Shape"}')
             loaded = load_runtime_config(path=path)
             self.assertTrue(loaded.archive_root.lower().endswith("archive-old"))
             self.assertEqual(loaded.api_token, "keep_me")
+            self.assertEqual(loaded.archive_label, "Shape")
 
 
 if __name__ == "__main__":
