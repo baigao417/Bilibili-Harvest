@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>BilibiliHarvest</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-left">
+        <img src="icons/icon128.png" class="header-icon" alt="" />
+        <span class="header-title">BilibiliHarvest</span>
+      </div>
+      <div class="header-right">
+        <span class="status-label" id="statusLabel">检测中</span>
+        <div class="status-dot" id="statusDot" title="检测中"></div>
+      </div>
+    </header>
+
+    <section class="section">
+      <p class="field-label" style="margin-bottom:10px;">浏览器扩展是唯一主界面。首次使用请打开 dashboard 完成自动配对。</p>
+      <button id="openDashboardBtn" class="btn btn-primary btn-block" type="button">
+        <span class="btn-text">打开 Dashboard</span>
+      </button>
+      <button id="showWindowBtn" class="btn btn-outline btn-block" type="button" style="margin-top:10px;">
+        <span class="btn-text">显示诊断窗口</span>
+      </button>
+      <button id="retryBtn" class="btn btn-outline btn-block" type="button" style="margin-top:10px;">
+        <span class="btn-text">重新检测连接</span>
+      </button>
+    </section>
+
+    <div class="status-bar" id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

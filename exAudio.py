@@ -1,0 +1,180 @@
+﻿import glob
+import json
+import os
+import time
+
+from runtime_tools import find_ffmpeg, find_ffprobe, run_command, summarize_error
+
+
+MEDIA_EXTENSIONS = (".mp4", ".m4a", ".flv", ".mkv", ".webm", ".avi", ".mov")
+
+
+def _probe_stream_types(file_path):
+    ffprobe_bin = find_ffprobe()
+    result = run_command(
+        [
+            ffprobe_bin,
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_streams",
+            file_path,
+        ],
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {summarize_error(result.stderr)}")
+
+    try:
+        data = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"ffprobe JSON parse failed: {exc}") from exc
+
+    streams = data.get("streams", [])
+    has_audio = any(stream.get("codec_type") == "audio" for stream in streams)
+    has_video = any(stream.get("codec_type") == "video" for stream in streams)
+    return has_audio, has_video
+
+
+def _collect_media_candidates(name, folder):
+    candidates = []
+
+    direct_path = f"{folder}/{name}.mp4"
+    if os.path.exists(direct_path):
+        candidates.append(direct_path)
+
+    dir_path = f"{folder}/{name}"
+    if os.path.isdir(dir_path):
+        for file_name in sorted(os.listdir(dir_path)):
+            if file_name.lower().endswith(MEDIA_EXTENSIONS):
+                candidates.append(os.path.join(dir_path, file_name))
+
+    deduped = []
+    seen = set()
+    for candidate in candidates:
+        normalized = os.path.normpath(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(candidate)
+
+    if not deduped:
+        raise FileNotFoundError(f"No media file found for source: {folder}/{name}")
+    return deduped
+
+
+def _select_audio_source(name, folder="bilibili_video"):
+    candidates = _collect_media_candidates(name, folder)
+
+    audio_only = []
+    mixed_media = []
+    for candidate in candidates:
+        has_audio, has_video = _probe_stream_types(candidate)
+        if has_audio and not has_video:
+            audio_only.append(candidate)
+        elif has_audio:
+            mixed_media.append(candidate)
+
+    if audio_only:
+        return audio_only[0]
+    if mixed_media:
+        return mixed_media[0]
+
+    raise RuntimeError("no audio stream found in downloaded media files")
+
+
+def check_video_integrity(file_path):
+    ffmpeg_bin = find_ffmpeg()
+    result = run_command(
+        [ffmpeg_bin, "-v", "error", "-i", file_path, "-f", "null", "-"],
+        timeout=300,
+    )
+    if result.returncode != 0:
+        print(f"FFmpeg integrity check failed for: {file_path}")
+        print(f"FFmpeg error: {summarize_error(result.stderr)}")
+        return False
+    return True
+
+
+def convert_flv_to_mp3(name, target_name=None, folder="bilibili_video"):
+    source_path = _select_audio_source(name, folder=folder)
+    if not check_video_integrity(source_path):
+        raise ValueError(f"Media file failed integrity check: {source_path}")
+
+    ffmpeg_bin = find_ffmpeg()
+    os.makedirs("audio/conv", exist_ok=True)
+    output_name = target_name if target_name else name
+    output_path = f"audio/conv/{output_name}.mp3"
+
+    result = run_command(
+        [
+            ffmpeg_bin,
+            "-y",
+            "-i",
+            source_path,
+            "-vn",
+            "-acodec",
+            "libmp3lame",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            output_path,
+        ],
+        timeout=1800,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg extraction failed: {summarize_error(result.stderr)}")
+
+    print(f"Audio extracted: {output_path} (source: {os.path.basename(source_path)})")
+    return output_path
+
+
+def split_mp3(filename, folder_name, slice_length=45000, target_folder="audio/slice"):
+    ffmpeg_bin = find_ffmpeg()
+    segment_seconds = str(slice_length / 1000)
+    target_dir = os.path.join(target_folder, folder_name)
+    os.makedirs(target_dir, exist_ok=True)
+
+    out_pattern = os.path.join(target_dir, "%d.mp3")
+    result = run_command(
+        [
+            ffmpeg_bin,
+            "-y",
+            "-i",
+            filename,
+            "-f",
+            "segment",
+            "-segment_time",
+            segment_seconds,
+            "-segment_start_number",
+            "1",
+            "-c",
+            "copy",
+            out_pattern,
+        ],
+        timeout=1800,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg split failed: {summarize_error(result.stderr)}")
+
+    def _sort_key(path):
+        stem = os.path.splitext(os.path.basename(path))[0]
+        return (0, int(stem)) if stem.isdigit() else (1, stem)
+
+    slice_files = sorted(glob.glob(os.path.join(target_dir, "*.mp3")), key=_sort_key)
+    if not slice_files:
+        raise FileNotFoundError("No slice file generated by ffmpeg split.")
+
+    for index, slice_file in enumerate(slice_files, start=1):
+        print(f"Slice {index} saved: {slice_file}")
+
+
+def process_audio_split(name):
+    folder_name = time.strftime("%Y%m%d%H%M%S")
+    conv_path = convert_flv_to_mp3(name, target_name=folder_name)
+    if not os.path.exists(conv_path):
+        raise FileNotFoundError(f"Converted audio file not found: {conv_path}")
+    split_mp3(conv_path, folder_name)
+    return folder_name
