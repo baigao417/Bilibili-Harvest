@@ -97,6 +97,90 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
    - 可选自定义知识库名称
    - 可选登录 NotebookLM
 
+## 详细安装步骤（Windows）
+
+如果你是第一次接触这个项目，建议按下面顺序操作：
+
+1. 打开 PowerShell
+   - 不要在 Python 交互环境里输入命令
+   - 如果你看到命令行前面是 `>>>`，说明你在 Python 里，先输入 `exit()` 退出
+
+2. 进入项目目录
+
+```powershell
+cd "你的项目目录"
+```
+
+3. 先检查 Python 是否正确
+
+```powershell
+py -3.12 -V
+```
+
+4. 再检查依赖环境
+
+```powershell
+py -3.12 scripts\launcher.py --doctor
+```
+
+如果这里看到 `doctor completed: no blocking issues`，说明环境基本正常。
+
+5. 运行一键安装脚本
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
+```
+
+这个脚本会依次完成：
+
+- 安装 Python 依赖
+- 运行 doctor 检查
+- 创建桌面快捷方式
+- 安装开机自启
+- 启动桌面端托盘服务
+
+6. 检查是否安装成功
+
+安装成功后，你应该能看到：
+
+- 托盘区出现 `BilibiliHarvest` 图标
+- 桌面上出现 `BilibiliHarvest` 快捷方式
+- Chrome 扩展可以通过 dashboard 扫描到本地服务
+
+7. 安装扩展
+
+- 打开 Chrome
+- 进入扩展管理页面
+- 开启“开发者模式”
+- 选择“加载已解压的扩展程序”
+- 选择项目里的 `browser_extension/` 目录
+
+8. 打开 dashboard 完成首次向导
+
+向导会引导你完成：
+
+- 自动扫描桌面端
+- 自动配对
+- 设置本地知识库目录
+- 自定义本地知识库名称
+- 可选登录 NotebookLM
+
+## 如果安装时出错
+
+- 如果 `py -3.12 -V` 失败：
+  - 说明 Python 3.12 没装好，先安装 Python 3.12
+
+- 如果 `doctor` 失败：
+  - 先根据输出补齐 `ffmpeg / ffprobe / yt-dlp / you-get`
+
+- 如果 `setup_windows.ps1` 直接报 PowerShell 语法错误：
+  - 请先确认你拿到的是最新版本
+  - 当前项目已经尽量避免 PowerShell 5.1 的中文编码解析问题
+
+- 如果扩展连不上：
+  - 确认托盘服务已经启动
+  - 再打开 dashboard 重新扫描
+
 ## 推荐使用方式
 
 1. 保持桌面端后台运行

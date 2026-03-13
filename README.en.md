@@ -97,6 +97,90 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
    - optionally customize the feature name
    - optionally sign in to NotebookLM
 
+## Detailed Installation Steps (Windows)
+
+If this is your first time using the project, follow this order:
+
+1. Open PowerShell
+   - Do not type commands inside the Python interactive shell
+   - If your prompt shows `>>>`, you are inside Python; run `exit()` first
+
+2. Enter the project directory
+
+```powershell
+cd "your-project-folder"
+```
+
+3. Check that Python is available
+
+```powershell
+py -3.12 -V
+```
+
+4. Check the runtime environment
+
+```powershell
+py -3.12 scripts\launcher.py --doctor
+```
+
+If you see `doctor completed: no blocking issues`, your environment is basically ready.
+
+5. Run the setup script
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
+```
+
+The script will:
+
+- install Python dependencies
+- run the doctor check
+- create a desktop shortcut
+- install autostart
+- launch the desktop tray service
+
+6. Verify the result
+
+After setup, you should see:
+
+- a `BilibiliHarvest` tray icon
+- a `BilibiliHarvest` desktop shortcut
+- a dashboard that can detect the local service
+
+7. Install the extension
+
+- open Chrome
+- go to the extensions page
+- enable Developer Mode
+- click "Load unpacked"
+- select the `browser_extension/` folder
+
+8. Open the dashboard and finish the first-run wizard
+
+The wizard will guide you through:
+
+- desktop service detection
+- auto-pairing
+- local knowledge base path setup
+- custom local knowledge base label
+- optional NotebookLM sign-in
+
+## If Installation Fails
+
+- If `py -3.12 -V` fails:
+  - Python 3.12 is not installed correctly yet
+
+- If `doctor` fails:
+  - install or fix `ffmpeg / ffprobe / yt-dlp / you-get` first
+
+- If `setup_windows.ps1` throws a PowerShell parser error:
+  - make sure you are on the latest version of the repository
+  - this project now avoids the common PowerShell 5.1 Chinese encoding issue as much as possible
+
+- If the extension cannot connect:
+  - make sure the tray service is running
+  - then reopen the dashboard and scan again
+
 ## Recommended Workflow
 
 1. Keep the desktop tray service running
