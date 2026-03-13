@@ -1,73 +1,77 @@
 # BilibiliHarvest
 
-A Windows + Chrome workflow tool for extracting Bilibili subtitles:
+[English README](README.en.md)
 
-- Desktop app: local API service + system tray
-- Browser extension: the primary UI
-- Local library: subtitles saved under `archive_root/<title>_<BV>/text/`
+一个面向 `Windows + Chrome` 的 B 站字幕采集工作流工具。
 
-## Quick Start
+- 桌面端：后台本地 API 服务 + 系统托盘
+- 浏览器扩展：唯一主界面
+- 本地资料库：字幕统一写入 `archive_root/<标题>_<BV>/text/`
 
-1. Install Python 3.12
-2. Run:
+## 快速开始
+
+1. 安装 Python `3.12`
+2. 在项目根目录运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 ```
 
-3. Load `browser_extension/` as an unpacked extension in Chrome
-4. Open the extension dashboard
-5. Finish the first-run wizard:
-   - detect desktop service
-   - auto-pair
-   - choose local library path
-   - optionally sign in to NotebookLM
+3. 在 Chrome 中加载 `browser_extension/`
+4. 打开扩展 `dashboard.html`
+5. 按向导完成：
+   - 扫描桌面端
+   - 自动配对
+   - 设置本地资料库目录
+   - 可选登录 NotebookLM
 
-## Architecture
+## 项目结构
 
-- The desktop app starts in tray mode by default
-- The tray menu can:
-  - open the extension dashboard
-  - show the diagnostic window
-  - quit the service
-- The browser extension dashboard handles:
-  - task import
-  - batch control
-  - saving to the local library
-  - pushing to NotebookLM
+- 桌面端默认以托盘模式启动，不主动弹主窗口
+- 托盘菜单可：
+  - 打开扩展控制台
+  - 显示诊断窗口
+  - 退出程序
+- 扩展 `dashboard` 负责：
+  - 添加任务
+  - 启动批处理
+  - 保存到本地资料库
+  - 推送到 NotebookLM
 
-## Storage
+## 存储路径
 
-The project no longer creates an `outputs/` directory.
+项目目录中不再生成 `outputs/`。
 
-- Runtime config:
+- 运行配置：
   - `config/runtime.json`
-- Batch snapshots:
+- 批次快照：
   - `config/batches/<batch_id>/state.json`
-- Failure diagnostics:
+- 失败诊断：
   - `config/batches/<batch_id>/failed.json`
-- Temporary subtitle cache:
+- 临时字幕缓存：
   - `config/tmp/<batch_id>/`
-- Default local library:
-  - `%USERPROFILE%\Documents\BilibiliHarvest Library`
+- 本地资料库默认目录：
+  - `%USERPROFILE%\\Documents\\BilibiliHarvest Library`
 
-Local library layout:
+本地资料库结构：
 
 - `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
 
-## Features
+## 主要能力
 
-- Prefer native Bilibili subtitle tracks
-- Fall back to Whisper ASR when no track is available
-- Supports single videos, multi-part videos, favorites, collections, series, and space uploads
-- One-click send from the current Chrome tab
-- One-click workflow after processing:
-  - save to local library
-  - push to NotebookLM
+- 优先抓取 B 站现成字幕轨道
+- 无轨道时自动降级到 Whisper ASR
+- 支持单视频、分P、收藏夹、合集、列表、主页投稿
+- Chrome 扩展当前页一键发送
+- 处理完成后一键：
+  - 保存到本地资料库
+  - 推送到 NotebookLM
 
-## Local API
+## 本地 API
 
-Main workflow-related endpoints:
+扩展通过本地 HTTP 服务访问桌面端。
+
+主要工作流接口：
 
 - `GET /v1/pairing/info`
 - `POST /v1/pairing/claim`
@@ -83,33 +87,48 @@ Main workflow-related endpoints:
 - `POST /v1/batch/start`
 - `POST /v1/batch/stop`
 
-## Safety
+## 借鉴与依赖的开源项目
 
-- Never commit `config/runtime.json`
-- Never commit `cookies.txt`
-- Never commit `config/batches/` or `config/tmp/`
-- The local API token is generated randomly on first start
+本项目在功能实现、工作流设计或运行时能力上，借鉴或依赖了以下开源项目：
 
-## Diagnostics
+- [`Lanbin07/bili2text`](https://github.com/Lanbin07/bili2text)：本项目的早期能力和基础方向来自该项目，许可证见仓库中的 `LICENSE`
+- [`openai/whisper`](https://github.com/openai/whisper)：ASR 转写能力
+- [`yt-dlp/yt-dlp`](https://github.com/yt-dlp/yt-dlp)：字幕轨道发现、下载和媒体兜底能力
+- [`soimort/you-get`](https://github.com/soimort/you-get)：部分下载链路兼容兜底
+- [`fastapi/fastapi`](https://github.com/fastapi/fastapi)：本地 HTTP API 服务
+- [`baoboa/pyqt5`](https://pypi.org/project/PyQt5/)：桌面端 UI 与托盘能力
+- [`ColinDuquesnoy/QDarkStyleSheet`](https://github.com/ColinDuquesnoy/QDarkStyleSheet)：桌面端样式
+- [`nbookdev/notebooklm-py`](https://pypi.org/project/notebooklm-py/)：NotebookLM 相关集成能力
+
+如果你认为这里遗漏了应该注明的来源，欢迎提 Issue 或 PR。
+
+## 安全说明
+
+- 不要提交 `config/runtime.json`
+- 不要提交 `cookies.txt`
+- 不要提交 `config/batches/` 和 `config/tmp/`
+- 本地 API token 会在首次启动时自动生成随机值
+
+## 诊断
 
 ```powershell
 py -3.12 scripts\launcher.py --doctor
 ```
 
-To show the desktop diagnostic window:
+如需显示桌面诊断窗口：
 
 ```powershell
 py -3.12 scripts\launcher.py --show-window
 ```
 
-## Export a Clean Public Snapshot
+## 导出为公开仓库快照
 
-To avoid carrying over private git history, export a clean snapshot first:
+如果你要避开当前私有仓库历史，建议导出一个干净快照再推到公开仓库：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\export_public_repo.ps1
 ```
 
-## License
+## 许可证
 
 MIT
