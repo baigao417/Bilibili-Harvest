@@ -206,7 +206,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 
 ## 存储路径
 
-项目目录中不再生成运行时 `outputs/` 文件夹。
 
 - 运行配置：
   - `config/runtime.json`
