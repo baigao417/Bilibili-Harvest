@@ -6,6 +6,7 @@ import sys
 import threading
 import uuid
 import webbrowser
+import winreg
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
@@ -1255,6 +1256,34 @@ class MainWindow(QMainWindow):
             return True
         return bool(extension_id and extension_id in configured)
 
+    def _autostart_registry_info(self) -> tuple[str, str, str]:
+        run_key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        value_name = "BilibiliHarvestBackground"
+        starter_script = os.path.abspath(os.path.join("scripts", "start_bili2text_background.ps1"))
+        value_data = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{starter_script}" -Quiet'
+        return run_key_path, value_name, value_data
+
+    def _is_autostart_enabled(self) -> bool:
+        run_key_path, value_name, expected_value = self._autostart_registry_info()
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key_path, 0, winreg.KEY_READ) as key:
+                value, _value_type = winreg.QueryValueEx(key, value_name)
+        except OSError:
+            return False
+        current = str(value or "").strip().lower()
+        return current == expected_value.strip().lower()
+
+    def _set_autostart_enabled(self, enabled: bool) -> None:
+        run_key_path, value_name, value_data = self._autostart_registry_info()
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, run_key_path) as key:
+            if enabled:
+                winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, value_data)
+            else:
+                try:
+                    winreg.DeleteValue(key, value_name)
+                except FileNotFoundError:
+                    pass
+
     def _svc_pairing_info(self) -> dict:
         return {
             "ok": True,
@@ -1262,6 +1291,7 @@ class MainWindow(QMainWindow):
             "port": int(self._http_server_port or self._runtime_config.http_port),
             "archive_root": str(getattr(self._runtime_config, "archive_root", "") or ""),
             "archive_label": str(getattr(self._runtime_config, "archive_label", "本地知识库") or "本地知识库"),
+            "autostart_enabled": self._is_autostart_enabled(),
             "core_version": CORE_VERSION,
         }
 
@@ -1293,6 +1323,7 @@ class MainWindow(QMainWindow):
             "ok": True,
             "archive_root": str(getattr(self._runtime_config, "archive_root", "") or ""),
             "archive_label": str(getattr(self._runtime_config, "archive_label", "本地知识库") or "本地知识库"),
+            "autostart_enabled": self._is_autostart_enabled(),
             "notebooklm_enabled": bool(self._runtime_config.notebooklm_enabled),
             "notebooklm_notebook_id": str(self._runtime_config.notebooklm_notebook_id or ""),
             "notebooklm_auto_clean": bool(self._runtime_config.notebooklm_auto_clean),
@@ -1303,7 +1334,7 @@ class MainWindow(QMainWindow):
         if not isinstance(payload, dict):
             return {"ok": False, "error": "invalid payload"}
 
-        allowed_fields = {"archive_root", "archive_label", "notebooklm_enabled", "notebooklm_notebook_id", "notebooklm_auto_clean"}
+        allowed_fields = {"archive_root", "archive_label", "autostart_enabled", "notebooklm_enabled", "notebooklm_notebook_id", "notebooklm_auto_clean"}
         unknown = sorted(key for key in payload.keys() if key not in allowed_fields)
         if unknown:
             return {"ok": False, "error": f"unsupported fields: {', '.join(unknown)}"}
@@ -1318,6 +1349,8 @@ class MainWindow(QMainWindow):
             if not archive_label:
                 return {"ok": False, "error": "archive_label is required"}
             self._runtime_config.archive_label = archive_label
+        if "autostart_enabled" in payload:
+            self._set_autostart_enabled(bool(payload.get("autostart_enabled")))
         if "notebooklm_enabled" in payload:
             self._runtime_config.notebooklm_enabled = bool(payload.get("notebooklm_enabled"))
         if "notebooklm_notebook_id" in payload:

@@ -95,6 +95,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
    - 自动配对
    - 设置本地知识库目录
    - 可选自定义知识库名称
+   - 可选开启或关闭 Windows 开机自启动
    - 可选登录 NotebookLM
 
 ## 详细安装步骤（Windows）
@@ -163,6 +164,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 - 自动配对
 - 设置本地知识库目录
 - 自定义本地知识库名称
+- 按需设置 Windows 开机自启动
 - 可选登录 NotebookLM
 
 ## 如果安装时出错

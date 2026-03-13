@@ -85,6 +85,7 @@ const ui = {
   cfgPort: $("cfgPort"),
   cfgToken: $("cfgToken"),
   cfgArchiveLabel: $("cfgArchiveLabel"),
+  cfgAutostart: $("cfgAutostart"),
   cfgSaveBtn: $("cfgSaveBtn"),
   cfgTestBtn: $("cfgTestBtn"),
 
@@ -295,6 +296,7 @@ async function handleWizardPrimary() {
     if (ui.wizardArchiveRow) ui.wizardArchiveRow.style.display = "block";
     if (ui.wizardArchiveRoot) ui.wizardArchiveRoot.value = String(cfg.archive_root || currentConfig.archive_root || "");
     if (ui.wizardArchiveLabel) ui.wizardArchiveLabel.value = String(cfg.archive_label || currentConfig.archive_label || DEFAULTS.archive_label);
+    if (ui.cfgAutostart) ui.cfgAutostart.checked = Boolean(cfg.autostart_enabled);
     if (ui.wizardPrimaryBtn) ui.wizardPrimaryBtn.textContent = "保存目录并继续";
     if (ui.wizardSecondaryBtn) {
       ui.wizardSecondaryBtn.style.display = "inline-flex";
@@ -965,6 +967,7 @@ function normalizeStoredConfig(cfg) {
     extension_id: String(merged.extension_id || "").trim(),
     archive_root: String(merged.archive_root || "").trim(),
     archive_label: String(merged.archive_label || DEFAULTS.archive_label).trim() || DEFAULTS.archive_label,
+    autostart_enabled: Boolean(merged.autostart_enabled),
     source_type: String(merged.source_type || DEFAULTS.source_type).trim() || DEFAULTS.source_type,
     import_mode: merged.import_mode || DEFAULTS.import_mode,
     limit: Number(merged.limit || DEFAULTS.limit),
@@ -980,6 +983,7 @@ async function loadConfig() {
       ui.cfgPort.value = normalized.port;
       ui.cfgToken.value = normalized.token;
       if (ui.cfgArchiveLabel) ui.cfgArchiveLabel.value = normalized.archive_label;
+      if (ui.cfgAutostart) ui.cfgAutostart.checked = Boolean(normalized.autostart_enabled);
       ui.sourceType.value = normalized.source_type;
       ui.importMode.value = normalized.import_mode;
       ui.limit.value = normalized.limit;
@@ -998,6 +1002,7 @@ function collectConfig() {
     extension_id: String((currentConfig && currentConfig.extension_id) || "").trim(),
     archive_root: String((currentConfig && currentConfig.archive_root) || "").trim(),
     archive_label: String((ui.cfgArchiveLabel && ui.cfgArchiveLabel.value) || (currentConfig && currentConfig.archive_label) || DEFAULTS.archive_label).trim() || DEFAULTS.archive_label,
+    autostart_enabled: Boolean(ui.cfgAutostart && ui.cfgAutostart.checked),
     source_type: ui.sourceType.value || DEFAULTS.source_type,
     import_mode: ui.importMode.value || DEFAULTS.import_mode,
     limit: Number(ui.limit.value || DEFAULTS.limit),
@@ -1011,10 +1016,11 @@ async function saveConfig() {
   chrome.storage.sync.set(cfg);
   await sendMessage({
     type: "runtime_config_patch",
-    payload: {
-      archive_root: cfg.archive_root,
-      archive_label: cfg.archive_label,
-    },
+      payload: {
+        archive_root: cfg.archive_root,
+        archive_label: cfg.archive_label,
+        autostart_enabled: cfg.autostart_enabled,
+      },
   });
   await sendMessage({ type: "save_config", payload: cfg });
   currentConfig = normalizeStoredConfig(cfg);

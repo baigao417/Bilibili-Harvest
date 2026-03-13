@@ -95,6 +95,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
    - auto-pair
    - choose the local knowledge base path
    - optionally customize the feature name
+   - optionally enable or disable Windows autostart
    - optionally sign in to NotebookLM
 
 ## Detailed Installation Steps (Windows)
@@ -163,6 +164,7 @@ The wizard will guide you through:
 - auto-pairing
 - local knowledge base path setup
 - custom local knowledge base label
+- Windows autostart toggle
 - optional NotebookLM sign-in
 
 ## If Installation Fails
