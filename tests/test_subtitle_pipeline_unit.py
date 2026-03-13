@@ -179,7 +179,7 @@ second line
             self.assertEqual(summary.shape_saved_count, 1)
             self.assertEqual(summary.skipped_count, 1)
             self.assertTrue(os.path.isfile(batch.failed_state_path))
-            shape_dir = os.path.join(shape_root, f"{task_shape.title}_{task_shape.bv}")
+            shape_dir = os.path.join(shape_root, task_shape.title)
             self.assertTrue(os.path.isdir(shape_dir))
             self.assertTrue(os.path.isdir(os.path.join(shape_dir, "text")))
             self.assertTrue(os.path.isdir(os.path.join(shape_dir, "video")))

@@ -33,7 +33,9 @@ BilibiliHarvest 主要解决三件事：
 - 一个通用的“本地知识库”保存入口
 - 也可以按照你自己的命名习惯，把它当作 `Shape of Me` 工作流
 
-保存到本地知识库时，会为每个任务建立独立目录：
+保存到本地知识库时，会为每个视频建立一个独立文件夹，并且这个文件夹默认使用视频标题命名。
+
+在这个视频文件夹里，会保存三类内容：
 
 - `video/`：默认优先保存 `1080P` 视频
 - `audio/`：同步保存提取后的音频
@@ -41,9 +43,9 @@ BilibiliHarvest 主要解决三件事：
 
 目录结构如下：
 
-- `<archive_root>/<safe_title>_<BV>/video/*`
-- `<archive_root>/<safe_title>_<BV>/audio/*`
-- `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
+- `<archive_root>/<视频标题>/video/*`
+- `<archive_root>/<视频标题>/audio/*`
+- `<archive_root>/<视频标题>/text/*.srt|*.txt|*.md`
 
 ## 名称可自定义
 

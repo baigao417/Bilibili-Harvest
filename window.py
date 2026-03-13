@@ -3172,7 +3172,7 @@ class MainWindow(QMainWindow):
         task_cookie_header = str(getattr(task, "request_cookie_header", "") or "").strip()
         cookie_header = task_cookie_header or self._cookie_header_for_api()
         task.asset_prepare_error = ""
-        task.shape_folder_name = f"{self._safe_title(task.title)}_{task.bv}"
+        task.shape_folder_name = self._safe_title(task.title)
         task.segments_cache = []
         task.segments_tmp_json = ""
         task.outputs = {}

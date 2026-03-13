@@ -664,8 +664,8 @@ def export_batch_selected(
             continue
 
         safe_title = _safe_title_for_folder(task.title)
-        folder_name = f"{safe_title}_{task.bv}"
-        base_name = folder_name
+        folder_name = safe_title
+        base_name = safe_title
         task_root = os.path.join(archive_root, folder_name)
         text_dir = os.path.join(task_root, "text")
         setattr(task, "shape_folder_name", folder_name)

@@ -33,7 +33,9 @@ The project supports saving processed results into your own local knowledge base
 - a generic local knowledge base workflow
 - or, if you prefer, your own `Shape of Me` style workflow
 
-When saving to the local knowledge base, each task gets its own folder:
+When saving to the local knowledge base, each video gets its own folder, and that folder is named after the video title by default.
+
+Inside that video folder, the project stores three kinds of content:
 
 - `video/`: saves video, preferring `1080P` by default
 - `audio/`: saves extracted audio
@@ -41,9 +43,9 @@ When saving to the local knowledge base, each task gets its own folder:
 
 Folder layout:
 
-- `<archive_root>/<safe_title>_<BV>/video/*`
-- `<archive_root>/<safe_title>_<BV>/audio/*`
-- `<archive_root>/<safe_title>_<BV>/text/*.srt|*.txt|*.md`
+- `<archive_root>/<video-title>/video/*`
+- `<archive_root>/<video-title>/audio/*`
+- `<archive_root>/<video-title>/text/*.srt|*.txt|*.md`
 
 ## Customizable Feature Name
 
