@@ -41,6 +41,25 @@ class BrowserExtensionDefaultsTests(unittest.TestCase):
         self.assertIn("function applyArchiveLabel", dashboard)
         self.assertIn("cfgAutostart", dashboard)
 
+    def test_dashboard_persists_runtime_config_updates(self):
+        dashboard = self._read_file("browser_extension/dashboard.js")
+        self.assertIn("async function persistConfig", dashboard)
+        self.assertIn("chrome.storage.sync.set(normalized", dashboard)
+        self.assertIn('await sendMessage({ type: "runtime_config_get" })', dashboard)
+        self.assertIn("currentConfig = await persistConfig({ ...(currentConfig || {}), ...cfg });", dashboard)
+        self.assertIn("currentConfig = await persistConfig({ ...(currentConfig || {}), ...unwrapResponse(resp) });", dashboard)
+
+    def test_dashboard_bootstrap_syncs_runtime_config_from_service(self):
+        dashboard = self._read_file("browser_extension/dashboard.js")
+        self.assertIn("async function syncRuntimeConfigFromService()", dashboard)
+        self.assertIn("await syncRuntimeConfigFromService();", dashboard)
+
+    def test_dashboard_shape_quick_export_uses_md_only_payload(self):
+        dashboard = self._read_file("browser_extension/dashboard.js")
+        self.assertIn('type: "export_subtitles"', dashboard)
+        self.assertIn("payload: {", dashboard)
+        self.assertIn("formats: { md: true }", dashboard)
+
     def test_dashboard_html_contains_wizard_and_offline_panels(self):
         dashboard_html = self._read_file("browser_extension/dashboard.html")
         self.assertIn('id="wizardPanel"', dashboard_html)
@@ -82,6 +101,13 @@ class BrowserExtensionDefaultsTests(unittest.TestCase):
         self.assertIn("sender.tab.id", background)
         self.assertIn('sendSingle(message.url || "", tabId)', background)
         self.assertIn('sendSingle(String(urls[0] || "").trim(), tabId, {', background)
+
+    def test_background_quick_exports_use_md_only_formats(self):
+        background = self._read_file("browser_extension/background.js")
+        self.assertIn('message.type === "upload_to_notebooklm"', background)
+        self.assertIn("notebook_id: message.notebookId", background)
+        self.assertIn("formats: { md: true }", background)
+        self.assertIn("message.payload", background)
 
     def test_popup_is_reduced_to_dashboard_entry(self):
         popup = self._read_file("browser_extension/popup.js")

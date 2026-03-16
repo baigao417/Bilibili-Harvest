@@ -1067,20 +1067,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "upload_to_notebooklm") {
-    // callBatchExport with upload_to_notebooklm=true? 
-    // Wait, the backend endpoint for pure "push" might be 'export' with options.
-    // Let's check local_api_server.py
-    // Actually typically we use "harvest_batch_export" with target
-    // We need to implement callBatchExport properly
     callBatchExport({ 
         notebook_id: message.notebookId,
-        upload_to_notebooklm: true
+        formats: { md: true }
     }).then(done).catch(fail);
     return true;
   }
 
   if (message.type === "export_subtitles") {
-    callBatchExport(message.formats || {}).then(done).catch(fail);
+    const payload = (message.payload && typeof message.payload === "object")
+      ? message.payload
+      : (message.formats || {});
+    callBatchExport(payload).then(done).catch(fail);
     return true;
   }
 

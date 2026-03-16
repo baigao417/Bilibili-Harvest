@@ -178,6 +178,9 @@ async function bootstrapDashboard() {
   if (ui.wizardPanel) ui.wizardPanel.style.display = "none";
   if (ui.offlinePanel) ui.offlinePanel.style.display = "none";
   currentConfig = await loadConfig();
+  if (currentConfig && currentConfig.paired) {
+    await syncRuntimeConfigFromService();
+  }
   applyArchiveLabel(currentArchiveLabel());
   await checkConnection();
   startPolling();
@@ -291,7 +294,7 @@ async function handleWizardPrimary() {
       return;
     }
     const cfg = unwrapResponse(cfgResp);
-    currentConfig = { ...(currentConfig || {}), ...cfg };
+    currentConfig = await persistConfig({ ...(currentConfig || {}), ...cfg });
     applyArchiveLabel(currentArchiveLabel());
     if (ui.wizardArchiveRow) ui.wizardArchiveRow.style.display = "block";
     if (ui.wizardArchiveRoot) ui.wizardArchiveRoot.value = String(cfg.archive_root || currentConfig.archive_root || "");
@@ -316,7 +319,7 @@ async function handleWizardPrimary() {
       setWizardStatus(responseError(resp, "保存目录失败"), "error");
       return;
     }
-    currentConfig = { ...(currentConfig || {}), ...unwrapResponse(resp) };
+    currentConfig = await persistConfig({ ...(currentConfig || {}), ...unwrapResponse(resp) });
     applyArchiveLabel(currentArchiveLabel());
     wizardStep = 3;
     if (ui.wizardStepText) ui.wizardStepText.textContent = "步骤 3/4：可选登录 NotebookLM";
@@ -618,7 +621,9 @@ async function markTasksForShape(tasks) {
 async function exportToShape() {
   const resp = await sendMessage({
     type: "export_subtitles",
-    formats: { srt: true, txt: true, md: true }
+    payload: {
+      formats: { md: true },
+    },
   });
   if (!isResponseOk(resp)) {
     finishWorkflow("fail", responseError(resp, `保存到${currentArchiveLabel()}失败`));
@@ -976,6 +981,28 @@ function normalizeStoredConfig(cfg) {
   };
 }
 
+async function persistConfig(cfg) {
+  const normalized = normalizeStoredConfig(cfg);
+  return new Promise((resolve) => {
+    chrome.storage.sync.set(normalized, () => {
+      currentConfig = normalized;
+      resolve(normalized);
+    });
+  });
+}
+
+async function syncRuntimeConfigFromService() {
+  const cfgResp = await sendMessage({ type: "runtime_config_get" });
+  if (!cfgResp || !cfgResp.ok) {
+    return { ok: false, error: responseError(cfgResp, "读取配置失败") };
+  }
+
+  const cfg = unwrapResponse(cfgResp);
+  const merged = await persistConfig({ ...(currentConfig || {}), ...cfg });
+  applyArchiveLabel(String(merged.archive_label || DEFAULTS.archive_label));
+  return { ok: true, config: merged };
+}
+
 async function loadConfig() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(DEFAULTS, (cfg) => {
@@ -1013,17 +1040,21 @@ function collectConfig() {
 
 async function saveConfig() {
   const cfg = collectConfig();
-  chrome.storage.sync.set(cfg);
-  await sendMessage({
+  const patchResp = await sendMessage({
     type: "runtime_config_patch",
-      payload: {
-        archive_root: cfg.archive_root,
-        archive_label: cfg.archive_label,
-        autostart_enabled: cfg.autostart_enabled,
-      },
+    payload: {
+      archive_root: cfg.archive_root,
+      archive_label: cfg.archive_label,
+      autostart_enabled: cfg.autostart_enabled,
+    },
   });
-  await sendMessage({ type: "save_config", payload: cfg });
-  currentConfig = normalizeStoredConfig(cfg);
+  if (!patchResp || !patchResp.ok) {
+    setStatusMessage(responseError(patchResp, "配置保存失败"), "error");
+    return;
+  }
+  const merged = { ...cfg, ...unwrapResponse(patchResp) };
+  await persistConfig(merged);
+  await sendMessage({ type: "save_config", payload: merged });
   applyArchiveLabel(currentArchiveLabel());
   setStatusMessage("配置已保存", "ok");
 }

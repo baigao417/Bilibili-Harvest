@@ -185,6 +185,66 @@ second line
             self.assertTrue(os.path.isdir(os.path.join(shape_dir, "video")))
             self.assertTrue(os.path.isdir(os.path.join(shape_dir, "audio")))
 
+    def test_export_batch_selected_md_only(self):
+        from types import SimpleNamespace
+        from window import TaskStatus
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shape_root = os.path.join(tmp, "shape")
+            os.makedirs(shape_root, exist_ok=True)
+            video_file = os.path.join(tmp, "video.mp4")
+            audio_file = os.path.join(tmp, "audio.mp3")
+            with open(video_file, "w", encoding="utf-8") as f:
+                f.write("video")
+            with open(audio_file, "w", encoding="utf-8") as f:
+                f.write("audio")
+
+            task_shape = DummyTask(seq=3, bv="BVSHAPE", status=TaskStatus.COMPLETED_TRACK)
+            task_shape.segments_cache = [{"start_sec": 0.0, "end_sec": 1.0, "text": "shape"}]
+            task_shape.save_selected = True
+            task_shape.video_file_path = video_file
+            task_shape.audio_file_path = audio_file
+            batch = SimpleNamespace(
+                batch_id="BATCH001",
+                started_at=SimpleNamespace(strftime=lambda _fmt: "2026-02-24 00:00:00"),
+                model="small",
+                tasks=[task_shape],
+                total_count=1,
+                success_count=1,
+                failed_count=0,
+                failed_state_path=os.path.join(tmp, "failed.json"),
+            )
+            import datetime
+
+            batch.started_at = datetime.datetime(2026, 2, 24, 0, 0, 0)
+            summary = export_batch_selected(
+                batch,
+                selected_formats={"md"},
+                target_dir=tmp,
+                export_zip=False,
+                shape_root=shape_root,
+                save_selector=lambda task: bool(getattr(task, "save_selected", False)),
+                skip_selected_from_normal_export=True,
+            )
+
+            self.assertIsInstance(summary, ExportSummary)
+            self.assertEqual(summary.formats, ["md"])
+            self.assertEqual(summary.shape_saved_count, 1)
+
+            shape_dir = os.path.join(shape_root, task_shape.title)
+            text_dir = os.path.join(shape_dir, "text")
+            md_path = os.path.join(text_dir, f"{task_shape.title}.md")
+            txt_path = os.path.join(text_dir, f"{task_shape.title}.txt")
+            srt_path = os.path.join(text_dir, f"{task_shape.title}.srt")
+
+            self.assertEqual(set(task_shape.outputs.keys()), {"md"})
+            self.assertEqual(task_shape.output_file, md_path)
+            self.assertTrue(os.path.isfile(md_path))
+            self.assertFalse(os.path.exists(txt_path))
+            self.assertFalse(os.path.exists(srt_path))
+            self.assertTrue(os.path.isdir(os.path.join(shape_dir, "video")))
+            self.assertTrue(os.path.isdir(os.path.join(shape_dir, "audio")))
+
     @patch("subtitle_pipeline.run_command")
     def test_manual_cookie_header_replaces_cookie_chain(self, mock_run_command):
         mock_run_command.return_value = subprocess.CompletedProcess(
