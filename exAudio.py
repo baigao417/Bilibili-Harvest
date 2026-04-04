@@ -97,15 +97,17 @@ def check_video_integrity(file_path):
     return True
 
 
-def convert_flv_to_mp3(name, target_name=None, folder="bilibili_video"):
+def convert_flv_to_mp3(name, target_name=None, folder="bilibili_video", output_path=None):
     source_path = _select_audio_source(name, folder=folder)
     if not check_video_integrity(source_path):
         raise ValueError(f"Media file failed integrity check: {source_path}")
 
     ffmpeg_bin = find_ffmpeg()
-    os.makedirs("audio/conv", exist_ok=True)
     output_name = target_name if target_name else name
-    output_path = f"audio/conv/{output_name}.mp3"
+    final_output_path = output_path or f"audio/conv/{output_name}.mp3"
+    output_dir = os.path.dirname(final_output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
     result = run_command(
         [
@@ -120,15 +122,15 @@ def convert_flv_to_mp3(name, target_name=None, folder="bilibili_video"):
             "44100",
             "-ac",
             "2",
-            output_path,
+            final_output_path,
         ],
         timeout=1800,
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg extraction failed: {summarize_error(result.stderr)}")
 
-    print(f"Audio extracted: {output_path} (source: {os.path.basename(source_path)})")
-    return output_path
+    print(f"Audio extracted: {final_output_path} (source: {os.path.basename(source_path)})")
+    return final_output_path
 
 
 def split_mp3(filename, folder_name, slice_length=45000, target_folder="audio/slice"):
@@ -171,10 +173,15 @@ def split_mp3(filename, folder_name, slice_length=45000, target_folder="audio/sl
         print(f"Slice {index} saved: {slice_file}")
 
 
-def process_audio_split(name):
+def process_audio_split(name, media_folder="bilibili_video", conv_target_dir="audio/conv", slice_target_root="audio/slice"):
     folder_name = time.strftime("%Y%m%d%H%M%S")
-    conv_path = convert_flv_to_mp3(name, target_name=folder_name)
+    conv_path = convert_flv_to_mp3(
+        name,
+        target_name=folder_name,
+        folder=media_folder,
+        output_path=os.path.join(conv_target_dir, f"{folder_name}.mp3"),
+    )
     if not os.path.exists(conv_path):
         raise FileNotFoundError(f"Converted audio file not found: {conv_path}")
-    split_mp3(conv_path, folder_name)
+    split_mp3(conv_path, folder_name, target_folder=slice_target_root)
     return folder_name

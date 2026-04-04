@@ -19,10 +19,11 @@ class FakeWindow:
     _sanitize_prefetched_segments = MainWindow._sanitize_prefetched_segments
     _prepare_media_for_selected_task = MainWindow._prepare_media_for_selected_task
 
-    def __init__(self):
+    def __init__(self, archive_root: str = ""):
         self._state_lock = threading.Lock()
         self._media_cache_lock = threading.Lock()
         self.table_refresh_signal = DummySignal()
+        self._runtime_config = SimpleNamespace(archive_root=archive_root)
 
     def _current_cookie_mode(self):
         return "none"
@@ -67,14 +68,16 @@ def _make_task():
 
 
 def _make_batch(tmp_dir):
+    archive_root = os.path.join(tmp_dir, "archive")
     success_dir = os.path.join(tmp_dir, "success")
     success_srt_dir = os.path.join(success_dir, "srt")
     success_txt_dir = os.path.join(success_dir, "txt")
     success_md_dir = os.path.join(success_dir, "md")
     tmp_subtitle_dir = os.path.join(tmp_dir, "_tmp_subtitles")
-    for path in (success_dir, success_srt_dir, success_txt_dir, success_md_dir, tmp_subtitle_dir):
+    for path in (archive_root, success_dir, success_srt_dir, success_txt_dir, success_md_dir, tmp_subtitle_dir):
         os.makedirs(path, exist_ok=True)
     return SimpleNamespace(
+        export_dir=archive_root,
         success_dir=success_dir,
         success_srt_dir=success_srt_dir,
         success_txt_dir=success_txt_dir,
@@ -126,15 +129,16 @@ class ProcessFallbackOrderTests(unittest.TestCase):
     @patch("window.download_video_prefer_1080", return_value="video.mp4")
     def test_prefetch_save_selected_prepares_archive_media(
         self,
-        _mock_download_video_prefer_1080,
-        _mock_convert_flv_to_mp3,
+        mock_download_video_prefer_1080,
+        mock_convert_flv_to_mp3,
         mock_ensure_task_identifiers,
         mock_discover_bili_tracks,
         mock_discover_tracks_with_meta,
     ):
-        fake_window = FakeWindow()
         with tempfile.TemporaryDirectory() as tmp:
             batch = _make_batch(tmp)
+            archive_root = batch.export_dir
+            fake_window = FakeWindow(archive_root=archive_root)
             task = _make_task()
             task.save_selected = True
             task.prefetched_segments = [
@@ -150,6 +154,16 @@ class ProcessFallbackOrderTests(unittest.TestCase):
         self.assertFalse(mock_ensure_task_identifiers.called)
         self.assertFalse(mock_discover_bili_tracks.called)
         self.assertFalse(mock_discover_tracks_with_meta.called)
+        self.assertTrue(mock_download_video_prefer_1080.called)
+        self.assertTrue(mock_convert_flv_to_mp3.called)
+
+        video_output_dir = mock_download_video_prefer_1080.call_args.kwargs["output_dir"]
+        self.assertTrue(video_output_dir.startswith(archive_root))
+        self.assertIn(".bilibili_harvest_work", video_output_dir)
+
+        convert_folder = mock_convert_flv_to_mp3.call_args.kwargs["folder"]
+        self.assertTrue(convert_folder.startswith(archive_root))
+        self.assertIn(".bilibili_harvest_work", convert_folder)
 
     @patch("window.discover_tracks_with_meta")
     @patch("window.fetch_bili_track_segments")
@@ -219,6 +233,7 @@ class ProcessFallbackOrderTests(unittest.TestCase):
     @patch("window.s2t.transcribe_to_segments")
     @patch("window.process_audio_split")
     @patch("window.infer_download_title")
+    @patch("window.download_video_prefer_1080", return_value="E:/archive/.bilibili_harvest_work/BV1TEST/video/test.mp4")
     @patch("window.download_video")
     @patch("window.discover_tracks_with_meta")
     @patch("window.discover_bili_tracks")
@@ -229,6 +244,7 @@ class ProcessFallbackOrderTests(unittest.TestCase):
         mock_discover_bili_tracks,
         mock_discover_tracks_with_meta,
         mock_download_video,
+        _mock_download_video_prefer_1080,
         mock_infer_download_title,
         mock_process_audio_split,
         mock_transcribe_to_segments,
@@ -253,6 +269,59 @@ class ProcessFallbackOrderTests(unittest.TestCase):
         self.assertEqual(task.result_source, "asr")
         self.assertEqual(task.selected_lang, "asr")
         self.assertTrue(mock_download_video.called)
+
+    @patch("window.s2t.transcribe_to_segments")
+    @patch("window.process_audio_split")
+    @patch("window.infer_download_title")
+    @patch("window.download_video_prefer_1080", return_value="video.mp4")
+    @patch("window.download_video")
+    @patch("window.discover_tracks_with_meta")
+    @patch("window.discover_bili_tracks")
+    @patch("window.ensure_task_identifiers")
+    def test_asr_save_selected_uses_archive_work_dir(
+        self,
+        _mock_ensure_task_identifiers,
+        mock_discover_bili_tracks,
+        mock_discover_tracks_with_meta,
+        mock_download_video,
+        mock_download_video_prefer_1080,
+        mock_infer_download_title,
+        mock_process_audio_split,
+        mock_transcribe_to_segments,
+    ):
+        mock_discover_bili_tracks.return_value = ([], ApiDiscoveryMeta(cookie_hint=False, endpoint_used="none", warnings=[]))
+        mock_discover_tracks_with_meta.return_value = (
+            [],
+            DiscoveryMeta(cookie_hint=False, stderr_summary="", used_cookie_mode="none"),
+        )
+        mock_infer_download_title.return_value = "IgnoredForSelected"
+        mock_process_audio_split.return_value = "slice_dir"
+        mock_transcribe_to_segments.return_value = [{"start_sec": 0.0, "end_sec": 1.0, "text": "fallback"}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            batch = _make_batch(tmp)
+            archive_root = batch.export_dir
+            fake_window = FakeWindow(archive_root=archive_root)
+            task = _make_task()
+            task.save_selected = True
+            MainWindow._process_task_once(fake_window, batch, task)
+
+        self.assertEqual(task.status, TaskStatus.COMPLETED_ASR)
+        self.assertEqual(task.result_source, "asr")
+        self.assertEqual(task.selected_lang, "asr")
+        self.assertFalse(mock_download_video.called)
+        self.assertTrue(mock_download_video_prefer_1080.called)
+        self.assertTrue(mock_process_audio_split.called)
+
+        video_output_dir = mock_download_video_prefer_1080.call_args.kwargs["output_dir"]
+        self.assertTrue(video_output_dir.startswith(archive_root))
+        self.assertIn(".bilibili_harvest_work", video_output_dir)
+
+        process_kwargs = mock_process_audio_split.call_args.kwargs
+        self.assertTrue(process_kwargs["media_folder"].startswith(archive_root))
+        self.assertTrue(process_kwargs["conv_target_dir"].startswith(archive_root))
+        self.assertTrue(process_kwargs["slice_target_root"].startswith(archive_root))
+        self.assertIn(".bilibili_harvest_work", process_kwargs["media_folder"])
 
 
 if __name__ == "__main__":

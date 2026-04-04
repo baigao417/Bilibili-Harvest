@@ -100,6 +100,7 @@ import notebooklm_client as nlm_client
 
 
 SHAPE_ROOT = DEFAULT_SHAPE_ROOT
+ARCHIVE_WORK_DIRNAME = ".bilibili_harvest_work"
 
 
 SOURCE_TYPE_LABELS = {
@@ -110,6 +111,26 @@ SOURCE_TYPE_LABELS = {
     "series": "列表",
     "space_uploads": "主页投稿",
 }
+
+
+def _resolve_archive_root(runtime_config, batch) -> str:
+    archive_root = (
+        getattr(runtime_config, "archive_root", "") or
+        getattr(batch, "export_dir", "") or
+        SHAPE_ROOT
+    )
+    return os.path.abspath(os.path.expanduser(str(archive_root)))
+
+
+def _selected_task_work_root(runtime_config, batch, task) -> str:
+    task_key = str(getattr(task, "bv", "") or getattr(task, "seq", "") or "task").strip() or "task"
+    safe_task_key = re.sub(r"[^A-Za-z0-9._-]+", "_", task_key)
+    return os.path.join(_resolve_archive_root(runtime_config, batch), ARCHIVE_WORK_DIRNAME, safe_task_key)
+
+
+def _infer_title_from_media_path(media_path: str) -> str:
+    stem = os.path.splitext(os.path.basename(str(media_path or "")))[0].strip()
+    return stem or "UnknownTitle"
 
 
 def source_item_to_task(seq: int, raw_input: str, item: SourceItem) -> TaskItem:
@@ -2844,6 +2865,9 @@ class MainWindow(QMainWindow):
         batch.media_cache.clear()
         if batch.tmp_subtitle_dir and os.path.isdir(batch.tmp_subtitle_dir):
             self._safe_remove_path(batch.tmp_subtitle_dir)
+        archive_work_root = os.path.join(_resolve_archive_root(getattr(self, "_runtime_config", None), batch), ARCHIVE_WORK_DIRNAME)
+        if os.path.isdir(archive_work_root) and not os.listdir(archive_work_root):
+            self._safe_remove_path(archive_work_root)
         batch.temp_cleaned = True
         if reason:
             self._log(reason, stage="CLEANUP")
@@ -2986,7 +3010,8 @@ class MainWindow(QMainWindow):
                 self._ensure_task_temp_path(task, path)
             return
 
-        output_dir = os.path.join("bilibili_video", task.bv)
+        work_root = _selected_task_work_root(getattr(self, "_runtime_config", None), batch, task)
+        output_dir = os.path.join(work_root, "video")
         video_path = download_video_prefer_1080(
             task.video_link or task.bv,
             output_dir=output_dir,
@@ -2997,9 +3022,14 @@ class MainWindow(QMainWindow):
             raise RuntimeError("1080优先下载失败")
 
         audio_target = f"{task.bv}_asset"
-        audio_path = convert_flv_to_mp3(task.bv, target_name=audio_target, folder="bilibili_video")
+        audio_path = convert_flv_to_mp3(
+            "video",
+            target_name=audio_target,
+            folder=work_root,
+            output_path=os.path.join(work_root, "audio", f"{audio_target}.mp3"),
+        )
 
-        temp_paths = [output_dir, audio_path]
+        temp_paths = [work_root]
         with cache_lock:
             batch.media_cache[task.bv] = {
                 "video": video_path,
@@ -3398,6 +3428,7 @@ class MainWindow(QMainWindow):
         with asr_gate:
             self._set_task_status(batch, task, TaskStatus.TRANSCRIBING_ASR, "ASR下载中")
             self._log("轨道不可用，切换 ASR 兜底", stage="DOWNLOAD", task=task)
+            selected_work_root = ""
             if task.save_selected:
                 with cache_lock:
                     cache = batch.media_cache.get(task.bv)
@@ -3405,8 +3436,10 @@ class MainWindow(QMainWindow):
                 if cached_video and os.path.exists(cached_video):
                     video_path = cached_video
                     output_dir = os.path.dirname(cached_video)
+                    selected_work_root = os.path.dirname(output_dir)
                 else:
-                    output_dir = os.path.join("bilibili_video", task.bv)
+                    selected_work_root = _selected_task_work_root(getattr(self, "_runtime_config", None), batch, task)
+                    output_dir = os.path.join(selected_work_root, "video")
                     video_path = download_video_prefer_1080(
                         task.video_link or task.bv,
                         output_dir=output_dir,
@@ -3415,14 +3448,14 @@ class MainWindow(QMainWindow):
                     )
                     if not video_path:
                         raise StageFailure(FailStage.DOWNLOAD, "下载失败，未获取到有效媒体文件", retryable=True)
-                file_identifier = task.bv
+                file_identifier = "video"
                 task.video_file_path = video_path
-                self._ensure_task_temp_path(task, output_dir)
+                self._ensure_task_temp_path(task, selected_work_root)
                 with cache_lock:
                     media_cache = batch.media_cache.get(task.bv, {"video": "", "audio": "", "temp_paths": []})
                     media_cache["video"] = video_path
-                    if output_dir not in media_cache["temp_paths"]:
-                        media_cache["temp_paths"].append(output_dir)
+                    if selected_work_root not in media_cache["temp_paths"]:
+                        media_cache["temp_paths"].append(selected_work_root)
                     batch.media_cache[task.bv] = media_cache
             else:
                 file_identifier = download_video(task.bv[2:])
@@ -3432,28 +3465,41 @@ class MainWindow(QMainWindow):
                 task.video_file_path = find_primary_media_file(output_dir)
                 self._ensure_task_temp_path(task, output_dir)
 
-            inferred = infer_download_title(task.bv)
+            inferred = _infer_title_from_media_path(task.video_file_path) if task.save_selected else infer_download_title(task.bv)
             if inferred and inferred != "UnknownTitle":
                 task.title = inferred
 
             self._set_task_status(batch, task, TaskStatus.TRANSCRIBING_ASR, "ASR切片中")
             try:
-                folder_name = process_audio_split(file_identifier)
+                if task.save_selected:
+                    audio_root = os.path.join(selected_work_root, "audio")
+                    slice_root = os.path.join(selected_work_root, ".audio_slice")
+                    folder_name = process_audio_split(
+                        file_identifier,
+                        media_folder=selected_work_root,
+                        conv_target_dir=audio_root,
+                        slice_target_root=slice_root,
+                    )
+                else:
+                    folder_name = process_audio_split(file_identifier)
             except Exception as exc:
                 raise StageFailure(FailStage.AUDIO_SPLIT, f"音频切片失败: {exc}")
-            task.audio_file_path = os.path.join("audio", "conv", f"{folder_name}.mp3")
-            slice_dir = os.path.join("audio", "slice", folder_name)
-            for path in (task.audio_file_path, slice_dir):
-                if os.path.exists(path):
-                    self._ensure_task_temp_path(task, path)
+            if task.save_selected:
+                task.audio_file_path = os.path.join(audio_root, f"{folder_name}.mp3")
+                slice_dir = os.path.join(slice_root, folder_name)
+            else:
+                task.audio_file_path = os.path.join("audio", "conv", f"{folder_name}.mp3")
+                slice_dir = os.path.join("audio", "slice", folder_name)
+                for path in (task.audio_file_path, slice_dir):
+                    if os.path.exists(path):
+                        self._ensure_task_temp_path(task, path)
             if task.save_selected:
                 with cache_lock:
                     cache = batch.media_cache.get(task.bv, {})
                     cache["audio"] = task.audio_file_path
                     cache.setdefault("temp_paths", [])
-                    for path in (task.audio_file_path, slice_dir):
-                        if path not in cache["temp_paths"]:
-                            cache["temp_paths"].append(path)
+                    if selected_work_root not in cache["temp_paths"]:
+                        cache["temp_paths"].append(selected_work_root)
                     batch.media_cache[task.bv] = cache
 
             def _progress(cur: int, total: int):
@@ -3467,7 +3513,7 @@ class MainWindow(QMainWindow):
             self._set_task_status(batch, task, TaskStatus.TRANSCRIBING_ASR, "ASR转写中")
             try:
                 segments = s2t.transcribe_to_segments(
-                    folder_name,
+                    slice_dir if task.save_selected else folder_name,
                     model=batch.model,
                     prompt="以下是普通话句子，这是一个关于视频内容的转写。",
                     progress_callback=_progress,

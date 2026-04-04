@@ -19,7 +19,6 @@ TITLE_MEDIA_EXTENSIONS = (".mp4", ".m4a", ".flv", ".mkv", ".webm", ".avi", ".mov
 
 
 def ensure_folders_exist(output_dir):
-    os.makedirs("bilibili_video", exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
 
