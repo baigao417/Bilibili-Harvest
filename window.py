@@ -100,7 +100,6 @@ import notebooklm_client as nlm_client
 
 
 SHAPE_ROOT = DEFAULT_SHAPE_ROOT
-ARCHIVE_WORK_DIRNAME = ".bilibili_harvest_work"
 
 
 SOURCE_TYPE_LABELS = {
@@ -113,19 +112,10 @@ SOURCE_TYPE_LABELS = {
 }
 
 
-def _resolve_archive_root(runtime_config, batch) -> str:
-    archive_root = (
-        getattr(runtime_config, "archive_root", "") or
-        getattr(batch, "export_dir", "") or
-        SHAPE_ROOT
-    )
-    return os.path.abspath(os.path.expanduser(str(archive_root)))
-
-
-def _selected_task_work_root(runtime_config, batch, task) -> str:
+def _selected_task_work_root(batch, task) -> str:
     task_key = str(getattr(task, "bv", "") or getattr(task, "seq", "") or "task").strip() or "task"
     safe_task_key = re.sub(r"[^A-Za-z0-9._-]+", "_", task_key)
-    return os.path.join(_resolve_archive_root(runtime_config, batch), ARCHIVE_WORK_DIRNAME, safe_task_key)
+    return os.path.join(batch.tmp_subtitle_dir, "selected_media", safe_task_key)
 
 
 def _infer_title_from_media_path(media_path: str) -> str:
@@ -2569,7 +2559,7 @@ class MainWindow(QMainWindow):
             "current_task_seq": None,
             "stop_requested": False,
             "started_at": last.started_at.isoformat() if (last and last.started_at) else None,
-            "has_exportable": bool(last and last.success_count > 0),
+            "has_exportable": bool(last and last.success_count > 0 and not last.exported_once),
         }
 
     def _svc_start_batch(self) -> dict:
@@ -2865,9 +2855,6 @@ class MainWindow(QMainWindow):
         batch.media_cache.clear()
         if batch.tmp_subtitle_dir and os.path.isdir(batch.tmp_subtitle_dir):
             self._safe_remove_path(batch.tmp_subtitle_dir)
-        archive_work_root = os.path.join(_resolve_archive_root(getattr(self, "_runtime_config", None), batch), ARCHIVE_WORK_DIRNAME)
-        if os.path.isdir(archive_work_root) and not os.listdir(archive_work_root):
-            self._safe_remove_path(archive_work_root)
         batch.temp_cleaned = True
         if reason:
             self._log(reason, stage="CLEANUP")
@@ -3010,7 +2997,7 @@ class MainWindow(QMainWindow):
                 self._ensure_task_temp_path(task, path)
             return
 
-        work_root = _selected_task_work_root(getattr(self, "_runtime_config", None), batch, task)
+        work_root = _selected_task_work_root(batch, task)
         output_dir = os.path.join(work_root, "video")
         video_path = download_video_prefer_1080(
             task.video_link or task.bv,
@@ -3438,7 +3425,7 @@ class MainWindow(QMainWindow):
                     output_dir = os.path.dirname(cached_video)
                     selected_work_root = os.path.dirname(output_dir)
                 else:
-                    selected_work_root = _selected_task_work_root(getattr(self, "_runtime_config", None), batch, task)
+                    selected_work_root = _selected_task_work_root(batch, task)
                     output_dir = os.path.join(selected_work_root, "video")
                     video_path = download_video_prefer_1080(
                         task.video_link or task.bv,
@@ -3564,6 +3551,27 @@ class MainWindow(QMainWindow):
         final_reason = "batch_stopped" if self._stop_requested else "batch_finished"
         self._snapshot_batch_state(batch, reason=final_reason)
 
+    def _should_auto_export_selected_batch(self, batch: Optional[BatchContext], *, stopped: bool) -> bool:
+        if stopped or not batch or batch.exported_once or batch.success_count <= 0:
+            return False
+        for task in getattr(batch, "tasks", []) or []:
+            if not getattr(task, "save_selected", False):
+                continue
+            if getattr(task, "status", None) in (TaskStatus.COMPLETED_TRACK, TaskStatus.COMPLETED_ASR):
+                return True
+        return False
+
+    def _maybe_auto_export_selected_batch(self, batch: Optional[BatchContext], *, stopped: bool) -> Optional[dict]:
+        if not self._should_auto_export_selected_batch(batch, stopped=stopped):
+            return None
+        result = self._svc_export_batch(formats=["srt", "txt", "md"])
+        if not result.get("ok"):
+            error = result.get("error") or result.get("reason") or "unknown export error"
+            self._log(f"自动保存到资料库失败: {error}", level="WARN", stage="EXPORT")
+            return result
+        self._log("批次完成后已自动保存到资料库", stage="EXPORT")
+        return result
+
     def _on_batch_finished(self, batch: BatchContext):
         with self._state_lock:
             self._last_batch = batch
@@ -3572,6 +3580,8 @@ class MainWindow(QMainWindow):
             self._worker_thread = None
             stopped = bool(self._stop_requested and batch.done_count < batch.total_count)
             self._stop_requested = False
+
+        self._maybe_auto_export_selected_batch(batch, stopped=stopped)
 
         self.btn_submit.setEnabled(True)
         if stopped:

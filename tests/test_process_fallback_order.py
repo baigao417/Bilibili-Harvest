@@ -158,12 +158,12 @@ class ProcessFallbackOrderTests(unittest.TestCase):
         self.assertTrue(mock_convert_flv_to_mp3.called)
 
         video_output_dir = mock_download_video_prefer_1080.call_args.kwargs["output_dir"]
-        self.assertTrue(video_output_dir.startswith(archive_root))
-        self.assertIn(".bilibili_harvest_work", video_output_dir)
+        self.assertTrue(video_output_dir.startswith(batch.tmp_subtitle_dir))
+        self.assertFalse(video_output_dir.startswith(archive_root))
 
         convert_folder = mock_convert_flv_to_mp3.call_args.kwargs["folder"]
-        self.assertTrue(convert_folder.startswith(archive_root))
-        self.assertIn(".bilibili_harvest_work", convert_folder)
+        self.assertTrue(convert_folder.startswith(batch.tmp_subtitle_dir))
+        self.assertFalse(convert_folder.startswith(archive_root))
 
     @patch("window.discover_tracks_with_meta")
     @patch("window.fetch_bili_track_segments")
@@ -314,14 +314,14 @@ class ProcessFallbackOrderTests(unittest.TestCase):
         self.assertTrue(mock_process_audio_split.called)
 
         video_output_dir = mock_download_video_prefer_1080.call_args.kwargs["output_dir"]
-        self.assertTrue(video_output_dir.startswith(archive_root))
-        self.assertIn(".bilibili_harvest_work", video_output_dir)
+        self.assertTrue(video_output_dir.startswith(batch.tmp_subtitle_dir))
+        self.assertFalse(video_output_dir.startswith(archive_root))
 
         process_kwargs = mock_process_audio_split.call_args.kwargs
-        self.assertTrue(process_kwargs["media_folder"].startswith(archive_root))
-        self.assertTrue(process_kwargs["conv_target_dir"].startswith(archive_root))
-        self.assertTrue(process_kwargs["slice_target_root"].startswith(archive_root))
-        self.assertIn(".bilibili_harvest_work", process_kwargs["media_folder"])
+        self.assertTrue(process_kwargs["media_folder"].startswith(batch.tmp_subtitle_dir))
+        self.assertTrue(process_kwargs["conv_target_dir"].startswith(batch.tmp_subtitle_dir))
+        self.assertTrue(process_kwargs["slice_target_root"].startswith(batch.tmp_subtitle_dir))
+        self.assertFalse(process_kwargs["media_folder"].startswith(archive_root))
 
 
 if __name__ == "__main__":
